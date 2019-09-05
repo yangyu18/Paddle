@@ -146,6 +146,9 @@ void SectionWorker::TrainFiles() {
   int64_t accum_num = 0;
   int batch_size = 0;
   Scope* scope = nullptr;
+  if (device_reader_ != nullptr) {
+    device_reader_->Start();
+  }
   while (in_scope_queue_->Receive(&scope)) {
     if (device_reader_ != nullptr) {
       device_reader_->AssignFeedVar(*scope);
@@ -275,6 +278,9 @@ void SectionWorker::TrainFilesWithProfiler() {
   platform::Timer timeline;
 
   bool started = false;
+  if (device_reader_ != nullptr) {
+    device_reader_->Start();
+  }
   while (in_scope_queue_->Receive(&scope)) {
     if (UNLIKELY(!started)) {
       outer_timer.Start();

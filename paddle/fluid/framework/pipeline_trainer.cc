@@ -192,7 +192,7 @@ void PipelineTrainer::InitTrainerEnv(const ProgramDesc& main_program,
     }
   }
 
-  if (pipeline_num_ > 1) {
+  if (false && pipeline_num_ > 1) {
     construct_sync_functor();
   }
 }

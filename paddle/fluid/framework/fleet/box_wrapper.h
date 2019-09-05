@@ -112,6 +112,11 @@ class BoxHelper {
     for (const auto& ins : pass_data) {
       const auto& feasign_v = ins.uint64_feasigns_;
       for (const auto feasign : feasign_v) {
+        if (dataset_->GetReaders()[0]->index_omited_in_feedpass_.find(
+                feasign.slot()) !=
+            dataset_->GetReaders()[0]->index_omited_in_feedpass_.end()) {
+          continue;
+        }
         feasign_to_box.push_back(feasign.sign().uint64_feasign_);
       }
     }

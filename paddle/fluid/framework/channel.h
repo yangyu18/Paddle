@@ -152,7 +152,9 @@ class ChannelObject {
   // read data of block size from channel to vector
   size_t Read(std::vector<T>& p) {  // NOLINT
     p.resize(block_size_);
+    printf("htj, block size: %d\n", (int)block_size_);
     size_t finished = Read(p.size(), &p[0]);
+    printf("htj, finished: %d\n", (int)finished);
     p.resize(finished);
     return finished;
   }
