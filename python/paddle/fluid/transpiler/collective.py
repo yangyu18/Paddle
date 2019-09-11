@@ -95,10 +95,7 @@ class Collective(object):
     def _transpile_startup_program(self):
         if self.nranks == 1:
             block = self.startup_program.global_block()
-            block.append_op(
-                type='c_comm_init_all',
-                attrs={'devices': [0, 1],
-                       'ring_id': 0})
+            block.append_op(type='c_comm_init_all', attrs={'ring_id': 0})
             return
         for ring_id in range(self.nrings):
             self._init_communicator(self.startup_program, self.current_endpoint,

@@ -2960,7 +2960,8 @@ class PipelineOptimizer(object):
                 continue
             section_var = [e for e in section_p["program"].block(0).vars]
             for p in section_var:
-                if p in whole_parameters:
+                if p in whole_parameters or p[
+                        0:5] == "learn":  #Workaround: copy lr to gpu
                     param_need_sync.append(p)
         program._pipeline_opt = {
             "trainer": "PipelineTrainer",
