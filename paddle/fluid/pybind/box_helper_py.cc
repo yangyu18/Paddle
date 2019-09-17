@@ -46,5 +46,16 @@ void BindBoxHelper(py::module* m) {
       .def("preload_into_memory", &framework::BoxHelper::PreLoadIntoMemory)
       .def("load_into_memory", &framework::BoxHelper::LoadIntoMemory);
 }  // end BoxHelper
+
+void BindBoxWrapper(py::module* m) {
+  py::class_<framework::BoxWrapper, std::shared_ptr<framework::BoxWrapper>>(
+      *m, "BoxWrapper")
+      .def(py::init([]() {
+        // return std::make_shared<paddle::framework::BoxHelper>(dataset);
+        return framework::BoxWrapper::GetInstance();
+      }))
+      .def("save_model", &framework::BoxWrapper::SaveModel)
+      .def("finalize", &framework::BoxWrapper::Finalize);
+}  // end BoxWrapper
 }  // end namespace pybind
 }  // end namespace paddle

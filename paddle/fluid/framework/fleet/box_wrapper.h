@@ -47,6 +47,13 @@ class BoxWrapper {
                       const std::vector<const float*>& grad_values,
                       const std::vector<int64_t>& slot_lengths,
                       const int hidden_size);
+  void Finalize() {
+    if (nullptr != s_instance_) {
+      s_instance_->boxps_ptr_->Finalize();
+    }
+  }
+  void SaveModel() const { printf("savemodel in box_Wrapper\n"); }
+  void LoadModel() const { printf("loadmodel in box\n"); }
 
   static std::shared_ptr<BoxWrapper> GetInstance() {
     if (nullptr == s_instance_) {
@@ -54,9 +61,32 @@ class BoxWrapper {
       static std::mutex mutex;
       std::lock_guard<std::mutex> lock(mutex);
       if (nullptr == s_instance_) {
+        VLOG(3) << "s_instance_ is null";
         s_instance_.reset(new paddle::framework::BoxWrapper());
 #ifdef PADDLE_WITH_BOX_PS
-        s_instance_->boxps_ptr_.reset(new paddle::boxps::FakeBoxPS());
+        // s_instance_->boxps_ptr_.reset(new boxps::PaddleBoxPS());
+        std::vector<cudaStream_t*> stream_list;
+        VLOG(3) << "Enter for";
+        // VLOG(3) << "CUDA_VISIBLE_DEVICES[" <<
+        // std::getenv("CUDA_VISIBLE_DEVICES") << "]";
+        for (int i = 0; i < platform::GetCUDADeviceCount(); ++i) {
+          VLOG(3) << "before get context i[" << i << "]";
+          platform::CUDADeviceContext* context =
+              dynamic_cast<platform::CUDADeviceContext*>(
+                  platform::DeviceContextPool::Instance().Get(
+                      platform::CUDAPlace(i)));
+          VLOG(3) << "after get context i[" << i << "]";
+          PADDLE_ENFORCE_EQ(context == nullptr, false, "context is nullptr");
+
+          stream_list_[i] = context->stream();
+          VLOG(3) << "after get stream i[" << i << "]";
+          stream_list.push_back(&stream_list_[i]);
+        }
+        VLOG(3) << "before call InitializeGPU";
+        s_instance_->boxps_ptr_.reset(new boxps::PaddleBoxPS());
+        s_instance_->boxps_ptr_->InitializeGPU("./conf/db.yaml", 32,
+                                               stream_list);
+        VLOG(3) << "after call InitializeGPU";
 #endif
       }
     }
@@ -65,7 +95,8 @@ class BoxWrapper {
 
  private:
 #ifdef PADDLE_WITH_BOX_PS
-  static std::shared_ptr<paddle::boxps::BoxPSBase> boxps_ptr_;
+  static cudaStream_t stream_list_[8];
+  static std::shared_ptr<boxps::PaddleBoxPS> boxps_ptr_;
 #endif
   static std::shared_ptr<BoxWrapper> s_instance_;
   int GetDate() const;
@@ -90,11 +121,16 @@ class BoxHelper {
     FeedPass();
   }
   void PreLoadIntoMemory() {
+    VLOG(3) << "Begin dataset_->PreLoadIntoMemory(), dataset[" << dataset_
+            << "]";
     dataset_->PreLoadIntoMemory();
+    VLOG(3) << "After dataset_->PreLoadIntoMemory(), dataset[" << dataset_
+            << "]";
     feed_data_thread_.reset(new std::thread([&]() {
       dataset_->WaitPreLoadDone();
       FeedPass();
     }));
+    VLOG(3) << "After PreLoadIntoMemory()";
   }
   void WaitFeedPassDone() { feed_data_thread_->join(); }
 
@@ -103,12 +139,16 @@ class BoxHelper {
   std::shared_ptr<std::thread> feed_data_thread_;
   // notify boxps to feed this pass feasigns from SSD to memory
   void FeedPass() {
+    VLOG(3) << "Begin FeedPass";
     auto box_ptr = BoxWrapper::GetInstance();
+    VLOG(3) << "After GetInstance";
     auto input_channel_ =
         dynamic_cast<MultiSlotDataset*>(dataset_)->GetInputChannel();
     std::vector<Record> pass_data;
     std::vector<uint64_t> feasign_to_box;
+    VLOG(3) << "Before ReadAll";
     input_channel_->ReadAll(pass_data);
+    VLOG(3) << "After ReadAll";
     for (const auto& ins : pass_data) {
       const auto& feasign_v = ins.uint64_feasigns_;
       for (const auto feasign : feasign_v) {
@@ -124,6 +164,7 @@ class BoxHelper {
     input_channel_->Write(pass_data);
     input_channel_->Close();
     box_ptr->FeedPass(feasign_to_box);
+    VLOG(3) << "End FeedPass";
   }
 };
 
