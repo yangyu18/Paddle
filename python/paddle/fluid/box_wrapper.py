@@ -27,3 +27,6 @@ class BoxWrapper(object):
 
     def save_model(self):
         self.box_wrapper.save_model()
+
+    def finalize(self):
+        self.box_wrapper.finalize()

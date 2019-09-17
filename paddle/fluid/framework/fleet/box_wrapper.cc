@@ -25,7 +25,7 @@ namespace framework {
 std::shared_ptr<BoxWrapper> BoxWrapper::s_instance_ = nullptr;
 #ifdef PADDLE_WITH_BOX_PS
 cudaStream_t BoxWrapper::stream_list_[8];
-std::shared_ptr<boxps::PaddleBoxPS> BoxWrapper::boxps_ptr_ = nullptr;
+std::shared_ptr<boxps::BoxPSBase> BoxWrapper::boxps_ptr_ = nullptr;
 #endif
 
 int BoxWrapper::GetDate() const {
@@ -76,10 +76,6 @@ void BoxWrapper::PullSparse(const paddle::platform::Place& place,
     LoDTensor total_keys_tensor;
     int64_t* total_keys =
         total_keys_tensor.mutable_data<int64_t>({total_length, 1}, place);
-    auto buf = memory::AllocShared(
-        place, total_length * sizeof(abacus::FeatureValueGpu));
-    abacus::FeatureValueGpu* total_values_gpu =
-        reinterpret_cast<abacus::FeatureValueGpu*>(buf->ptr());
 
     int64_t offset = 0;
     VLOG(3) << "Begin copy keys, key_num[" << keys.size() << "]";
@@ -109,12 +105,15 @@ void BoxWrapper::PullSparse(const paddle::platform::Place& place,
                       "tensors.");
 
     // Space allocation for FeatureValue is left for boxps
-    boxps::FeatureValue* total_values;
-
+    auto buf = memory::AllocShared(
+        place, total_length * sizeof(boxps::FeatureValueGpu));
+    boxps::FeatureValueGpu* total_values_gpu =
+        reinterpret_cast<boxps::FeatureValueGpu*>(buf->ptr());
     VLOG(3) << "Begin PullSparseGPU";
     if (platform::is_cpu_place(place)) {
+      // TODO(hutuxian): should use boxps::FeatureValue in the future
       int ret = boxps_ptr_->PullSparseCPU(
-          reinterpret_cast<uint64_t*>(total_keys), &total_values,
+          reinterpret_cast<uint64_t*>(total_keys), total_values_gpu,
           static_cast<int>(total_length));
       PADDLE_ENFORCE_EQ(ret, 0, "PullSparseCPU failed in BoxPS.");
     } else {
@@ -142,7 +141,7 @@ void BoxWrapper::PullSparse(const paddle::platform::Place& place,
               boost::get<platform::CPUPlace>(place),
               values[i] + j * hidden_size,
               boost::get<platform::CPUPlace>(place),
-              reinterpret_cast<float*>(&((total_values + offset)->show)),
+              reinterpret_cast<float*>(&((total_values_gpu + offset)->show)),
               sizeof(float) * hidden_size);
         } else {
 #if defined(PADDLE_WITH_CUDA) && !defined(_WIN32)
@@ -210,14 +209,9 @@ void BoxWrapper::PushSparseGrad(const paddle::platform::Place& place,
                       "should be equal to the sum of length of all input "
                       "tensors.");
     auto buf = memory::AllocShared(
-        place, total_length * sizeof(boxps::FeaturePushValue));
-    boxps::FeaturePushValue* total_grad_values =
-        reinterpret_cast<boxps::FeaturePushValue*>(buf->ptr());
-
-    auto buf1 = memory::AllocShared(
-        place, total_length * sizeof(abacus::FeaturePushValueGpu));
-    abacus::FeaturePushValueGpu* total_grad_values_gpu =
-        reinterpret_cast<abacus::FeaturePushValueGpu*>(buf1->ptr());
+        place, total_length * sizeof(boxps::FeaturePushValueGpu));
+    boxps::FeaturePushValueGpu* total_grad_values_gpu =
+        reinterpret_cast<boxps::FeaturePushValueGpu*>(buf->ptr());
 
     offset = 0;
     for (size_t i = 0; i < grad_values.size(); ++i) {
@@ -227,19 +221,20 @@ void BoxWrapper::PushSparseGrad(const paddle::platform::Place& place,
         // 'show','click','emb' are continuous in memory, so we copy here using
         // the 'show' address
         if (platform::is_cpu_place(place)) {
-          memory::Copy(
-              boost::get<platform::CPUPlace>(place),
-              reinterpret_cast<float*>(&((total_grad_values + offset)->show)),
-              boost::get<platform::CPUPlace>(place),
-              grad_values[i] + j * hidden_size, sizeof(float) * hidden_size);
+          memory::Copy(boost::get<platform::CPUPlace>(place),
+                       reinterpret_cast<float*>(
+                           &((total_grad_values_gpu + offset)->show)),
+                       boost::get<platform::CPUPlace>(place),
+                       grad_values[i] + j * hidden_size,
+                       sizeof(float) * hidden_size);
         } else {
 #if defined(PADDLE_WITH_CUDA) && !defined(_WIN32)
-          memory::Copy(
-              boost::get<platform::CUDAPlace>(place),
-              reinterpret_cast<float*>(&((total_grad_values + offset)->show)),
-              boost::get<platform::CUDAPlace>(place),
-              grad_values[i] + j * hidden_size, sizeof(float) * hidden_size,
-              nullptr);
+          memory::Copy(boost::get<platform::CUDAPlace>(place),
+                       reinterpret_cast<float*>(
+                           &((total_grad_values_gpu + offset)->show)),
+                       boost::get<platform::CUDAPlace>(place),
+                       grad_values[i] + j * hidden_size,
+                       sizeof(float) * hidden_size, nullptr);
 #endif
         }
         ++offset;
@@ -251,7 +246,7 @@ void BoxWrapper::PushSparseGrad(const paddle::platform::Place& place,
                       "input tensors.");
     if (platform::is_cpu_place(place)) {
       int ret = boxps_ptr_->PushSparseCPU(
-          reinterpret_cast<uint64_t*>(total_keys), total_grad_values,
+          reinterpret_cast<uint64_t*>(total_keys), total_grad_values_gpu,
           static_cast<int>(total_length));
       PADDLE_ENFORCE_EQ(ret, 0, "PushSparseCPU failed in BoxPS.");
     } else {

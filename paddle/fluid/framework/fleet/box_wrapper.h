@@ -83,7 +83,8 @@ class BoxWrapper {
           stream_list.push_back(&stream_list_[i]);
         }
         VLOG(3) << "before call InitializeGPU";
-        s_instance_->boxps_ptr_.reset(new boxps::PaddleBoxPS());
+        // s_instance_->boxps_ptr_.reset(new boxps::PaddleBoxPS());
+        s_instance_->boxps_ptr_.reset(boxps::BoxPSBase::GetIns());
         s_instance_->boxps_ptr_->InitializeGPU("./conf/db.yaml", 32,
                                                stream_list);
         VLOG(3) << "after call InitializeGPU";
@@ -96,7 +97,7 @@ class BoxWrapper {
  private:
 #ifdef PADDLE_WITH_BOX_PS
   static cudaStream_t stream_list_[8];
-  static std::shared_ptr<boxps::PaddleBoxPS> boxps_ptr_;
+  static std::shared_ptr<boxps::BoxPSBase> boxps_ptr_;
 #endif
   static std::shared_ptr<BoxWrapper> s_instance_;
   int GetDate() const;
