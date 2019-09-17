@@ -192,7 +192,9 @@ void DatasetImpl<T>::LoadIntoMemory() {
   }
   input_channel_->Close();
   int64_t in_chan_size = input_channel_->Size();
-  input_channel_->SetBlockSize(in_chan_size / thread_num_);
+  // input_channel_->SetBlockSize(in_chan_size / thread_num_);
+  input_channel_->SetBlockSize(in_chan_size /
+                               paddle::platform::GetCUDADeviceCount());
   printf("htj in_chan_size: %d, thread_num: %d\n", (int)in_chan_size,
          (int)thread_num_);
   // input_channel_->SetBlockSize(in_chan_size / thread_num_ + 1);
@@ -221,7 +223,7 @@ void DatasetImpl<T>::WaitPreLoadDone() {
   }
   input_channel_->Close();
   int64_t in_chan_size = input_channel_->Size();
-  input_channel_->SetBlockSize(in_chan_size / thread_num_);
+  input_channel_->SetBlockSize(in_chan_size / platform::GetCUDADeviceCount());
   // input_channel_->SetBlockSize(in_chan_size / thread_num_ + 1);
   VLOG(3) << "DatasetImpl<T>::WaitPreLoadDone() end";
 }

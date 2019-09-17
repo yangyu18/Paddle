@@ -23,7 +23,8 @@ namespace framework {
 
 void PipelineTrainer::Initialize(const TrainerDesc& trainer_desc,
                                  Dataset* dataset) {
-  pipeline_num_ = trainer_desc.thread_num();
+  // pipeline_num_ = trainer_desc.thread_num();
+  pipeline_num_ = platform::GetCUDADeviceCount();
   VLOG(3) << "pipeline num: " << pipeline_num_;
 
   SetDataset(dataset);
