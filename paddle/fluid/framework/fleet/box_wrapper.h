@@ -21,7 +21,7 @@ limitations under the License. */
 #include <vector>
 #include "paddle/fluid/framework/data_set.h"
 #ifdef PADDLE_WITH_BOX_PS
-#include <boxps.h>
+#include <boxps_public.h>
 #endif
 #include "paddle/fluid/platform/gpu_info.h"
 #include "paddle/fluid/platform/place.h"

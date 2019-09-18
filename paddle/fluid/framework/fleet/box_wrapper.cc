@@ -106,9 +106,9 @@ void BoxWrapper::PullSparse(const paddle::platform::Place& place,
 
     // Space allocation for FeatureValue is left for boxps
     auto buf = memory::AllocShared(
-        place, total_length * sizeof(boxps::FeatureValueGpu));
-    boxps::FeatureValueGpu* total_values_gpu =
-        reinterpret_cast<boxps::FeatureValueGpu*>(buf->ptr());
+        place, total_length * sizeof(abacus::FeatureValueGpu));
+    abacus::FeatureValueGpu* total_values_gpu =
+        reinterpret_cast<abacus::FeatureValueGpu*>(buf->ptr());
     VLOG(3) << "Begin PullSparseGPU";
     if (platform::is_cpu_place(place)) {
       // TODO(hutuxian): should use boxps::FeatureValue in the future
@@ -209,9 +209,9 @@ void BoxWrapper::PushSparseGrad(const paddle::platform::Place& place,
                       "should be equal to the sum of length of all input "
                       "tensors.");
     auto buf = memory::AllocShared(
-        place, total_length * sizeof(boxps::FeaturePushValueGpu));
-    boxps::FeaturePushValueGpu* total_grad_values_gpu =
-        reinterpret_cast<boxps::FeaturePushValueGpu*>(buf->ptr());
+        place, total_length * sizeof(abacus::FeaturePushValueGpu));
+    abacus::FeaturePushValueGpu* total_grad_values_gpu =
+        reinterpret_cast<abacus::FeaturePushValueGpu*>(buf->ptr());
 
     offset = 0;
     for (size_t i = 0; i < grad_values.size(); ++i) {
