@@ -15,6 +15,7 @@ limitations under the License. */
 #pragma once
 
 #include <glog/logging.h>
+#include <atomic>
 #include <memory>
 #include <mutex>  // NOLINT
 #include <string>
@@ -37,6 +38,9 @@ class BoxWrapper {
   void FeedPass(const std::vector<uint64_t>& feasgin_to_box) const;
   void BeginPass() const;
   void EndPass() const;
+  void ResetClickNum();
+  void UpdateClickNum(int64_t actual_val, float pred_val);
+  void PrintClickNum() const;
   void PullSparse(const paddle::platform::Place& place,
                   const std::vector<const uint64_t*>& keys,
                   const std::vector<float*>& values,
@@ -101,6 +105,10 @@ class BoxWrapper {
 #endif
   static std::shared_ptr<BoxWrapper> s_instance_;
   int GetDate() const;
+  // will be failed when multi datasets run concurrently.
+  std::atomic<int64_t> actual_click;
+  float pred_click;
+  std::mutex add_mutex;
 };
 
 class BoxHelper {

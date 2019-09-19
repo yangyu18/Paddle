@@ -15,6 +15,7 @@
 #if defined(PADDLE_WITH_CUDA) && !defined(_WIN32)
 #include "paddle/fluid/framework/data_feed_factory.h"
 #include "paddle/fluid/framework/device_worker_factory.h"
+#include "paddle/fluid/framework/fleet/box_wrapper.h"
 #include "paddle/fluid/framework/trainer.h"
 #include "paddle/fluid/framework/trainer_desc.pb.h"
 
@@ -233,6 +234,8 @@ void PipelineTrainer::construct_sync_functor() {
 
 void PipelineTrainer::Run() {
   VLOG(3) << "Going to run";
+  auto box_ptr = BoxWrapper::GetInstance();
+  box_ptr->ResetClickNum();
   for (int i = 0; i < section_num_; ++i) {
     for (int j = 0; j < pipeline_num_; ++j) {
       for (size_t k = 0; k < workers_[i][j].size(); ++k) {
@@ -252,6 +255,8 @@ void PipelineTrainer::Finalize() {
   for (auto& th : section_threads_) {
     th.join();
   }
+  auto box_ptr = BoxWrapper::GetInstance();
+  box_ptr->PrintClickNum();
   for (const auto& var : *param_need_sync_) {
     auto* root_tensor = root_scope_->Var(var)->GetMutable<LoDTensor>();
     // TODO(hutuxian): Add a final all-reduce?

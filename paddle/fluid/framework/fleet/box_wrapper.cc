@@ -42,6 +42,25 @@ int BoxWrapper::GetDate() const {
   return atoi(buf);
 }
 
+void BoxWrapper::ResetClickNum() {
+  actual_click.store(0);
+  std::lock_guard<std::mutex> lock(add_mutex);
+  pred_click = 0.0;
+}
+
+void BoxWrapper::UpdateClickNum(int64_t actual_val, float pred_val) {
+  actual_click.fetch_add(actual_val);
+  std::lock_guard<std::mutex> lock(add_mutex);
+  pred_click += pred_val;
+}
+
+void BoxWrapper::PrintClickNum() const {
+  auto actual_val = actual_click.load();
+  auto pred_val = pred_click;
+  printf("actual click: %ld, pred click: %lf\n", actual_val, pred_val);
+  printf("COPC: %lf\n", static_cast<float>(actual_val) / pred_val);
+}
+
 void BoxWrapper::FeedPass(const std::vector<uint64_t>& feasgin_to_box) const {
 #ifdef PADDLE_WITH_BOX_PS
   int ret = boxps_ptr_->FeedPass(GetDate(), feasgin_to_box);
