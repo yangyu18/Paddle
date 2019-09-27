@@ -21,6 +21,7 @@ limitations under the License. */
 #include <string>
 #include <vector>
 #include "paddle/fluid/framework/data_set.h"
+#include "paddle/fluid/platform/timer.h"
 #ifdef PADDLE_WITH_BOX_PS
 #include <boxps_public.h>
 #endif
@@ -29,6 +30,8 @@ limitations under the License. */
 
 namespace paddle {
 namespace framework {
+
+#define PADDLEBOX_LOG VLOG(0) << "PaddleBox: "
 
 class BoxWrapper {
  public:
@@ -126,15 +129,21 @@ class BoxHelper {
     box_ptr->EndPass();
   }
   void LoadIntoMemory() {
+    platform::Timer timer;
+    PADDLEBOX_LOG << "Begin LoadIntoMemory(), dataset[" << dataset_ << "]";
+    timer.Start();
     dataset_->LoadIntoMemory();
+    timer.Pause();
+    PADDLEBOX_LOG << "download + parse cost: " << timer.ElapsedSec() << "s";
+
+    timer.Start();
     FeedPass();
+    timer.Pause();
+    PADDLEBOX_LOG << "FeedPass cost: " << timer.ElapsedSec() << " s";
+    PADDLEBOX_LOG << "End LoadIntoMemory(), dataset[" << dataset_ << "]";
   }
   void PreLoadIntoMemory() {
-    VLOG(3) << "Begin dataset_->PreLoadIntoMemory(), dataset[" << dataset_
-            << "]";
     dataset_->PreLoadIntoMemory();
-    VLOG(3) << "After dataset_->PreLoadIntoMemory(), dataset[" << dataset_
-            << "]";
     feed_data_thread_.reset(new std::thread([&]() {
       dataset_->WaitPreLoadDone();
       FeedPass();
@@ -148,24 +157,15 @@ class BoxHelper {
   std::shared_ptr<std::thread> feed_data_thread_;
   // notify boxps to feed this pass feasigns from SSD to memory
   void FeedPass() {
-    VLOG(3) << "Begin FeedPass";
     auto box_ptr = BoxWrapper::GetInstance();
-    VLOG(3) << "After GetInstance";
     auto input_channel_ =
         dynamic_cast<MultiSlotDataset*>(dataset_)->GetInputChannel();
     std::vector<Record> pass_data;
     std::vector<uint64_t> feasign_to_box;
-    VLOG(3) << "Before ReadAll";
     input_channel_->ReadAll(pass_data);
-    VLOG(3) << "After ReadAll";
 
-    int ins_id = 0;
     auto& index_map = dataset_->GetReaders()[0]->index_omited_in_feedpass_;
     for (const auto& ins : pass_data) {
-      ins_id++;
-      if (ins_id % 10000 == 0) {
-        VLOG(0) << "box_helper, doing " << ins_id;
-      }
       const auto& feasign_v = ins.uint64_feasigns_;
       for (const auto feasign : feasign_v) {
         if (index_map.find(feasign.slot()) != index_map.end()) {
@@ -177,8 +177,9 @@ class BoxHelper {
     input_channel_->Open();
     input_channel_->Write(pass_data);
     input_channel_->Close();
+    PADDLEBOX_LOG << "call boxps feedpass";
     box_ptr->FeedPass(feasign_to_box);
-    VLOG(3) << "End FeedPass";
+    PADDLEBOX_LOG << "return from boxps feedpass";
   }
 };
 

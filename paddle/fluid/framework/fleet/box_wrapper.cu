@@ -139,7 +139,10 @@ void BoxWrapper::PullSparse(const paddle::platform::Place& place,
                             const std::vector<float*>& values,
                             const std::vector<int64_t>& slot_lengths,
                             const int hidden_size) {
-  VLOG(3) << "Begin call PullSparse";
+  PADDLEBOX_LOG << "Begin call PullSparse in BoxWrapper";
+  platform::Timer all_timer;
+  platform::Timer pull_boxps_timer;
+  all_timer.Start();
 #ifdef PADDLE_WITH_BOX_PS
   if (platform::is_cpu_place(place) || platform::is_gpu_place(place)) {
     int64_t total_length =
@@ -181,6 +184,7 @@ void BoxWrapper::PullSparse(const paddle::platform::Place& place,
     abacus::FeatureValueGpu* total_values_gpu =
         reinterpret_cast<abacus::FeatureValueGpu*>(buf->ptr());
     VLOG(3) << "Begin PullSparseGPU";
+    pull_boxps_timer.Start();
     if (platform::is_cpu_place(place)) {
       // TODO(hutuxian): should use boxps::FeatureValue in the future
       int ret = boxps_ptr_->PullSparseCPU(
@@ -197,6 +201,7 @@ void BoxWrapper::PullSparse(const paddle::platform::Place& place,
       VLOG(3) << "End call boxps_ptr_->PullSparseGPU";
 #endif
     }
+    pull_boxps_timer.Pause();
 
     offset = 0;
     VLOG(3) << "Begin Copy result to tensor, total_length[" << total_length
@@ -223,6 +228,11 @@ void BoxWrapper::PullSparse(const paddle::platform::Place& place,
         gpu_values, total_values_gpu, gpu_len, hidden_size, slot_lengths.size(),
         total_length);
     cudaStreamSynchronize(stream);
+    all_timer.Pause();
+
+    PADDLEBOX_LOG << "End PullSparse in BoxWrapper: total cost: "
+                  << all_timer.ElapsedSec() << " s, and pull boxps cost: "
+                  << pull_boxps_timer.ElapsedSec() << " s";
 
     // only support gpu for paddlebox
     /*
@@ -269,7 +279,10 @@ void BoxWrapper::PushSparseGrad(const paddle::platform::Place& place,
                                 const std::vector<const float*>& grad_values,
                                 const std::vector<int64_t>& slot_lengths,
                                 const int hidden_size) {
-  VLOG(3) << "Begin call PushSparse";
+  PADDLEBOX_LOG << "Begin call PushSparseGrad in BoxWrapper";
+  platform::Timer all_timer;
+  platform::Timer push_boxps_timer;
+  all_timer.Start();
 #ifdef PADDLE_WITH_BOX_PS
   if (platform::is_cpu_place(place) || platform::is_gpu_place(place)) {
     int64_t total_length =
@@ -360,6 +373,7 @@ void BoxWrapper::PushSparseGrad(const paddle::platform::Place& place,
       }
     }
     */
+    push_boxps_timer.Start();
     if (platform::is_cpu_place(place)) {
       int ret = boxps_ptr_->PushSparseCPU(
           reinterpret_cast<uint64_t*>(total_keys), total_grad_values_gpu,
@@ -376,6 +390,11 @@ void BoxWrapper::PushSparseGrad(const paddle::platform::Place& place,
       VLOG(3) << "End call PushSparseGPU";
 #endif
     }
+    push_boxps_timer.Pause();
+    all_timer.Pause();
+    PADDLEBOX_LOG << "End PushSparseGrad in BoxWrapper: total cost: "
+                  << all_timer.ElapsedSec() << " s, and push boxps cost: "
+                  << push_boxps_timer.ElapsedSec() << " s";
   } else {
     PADDLE_THROW(
         "PaddleBox: PushSparse Only Support CPUPlace and CUDAPlace Now.");
