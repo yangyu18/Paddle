@@ -19,6 +19,7 @@ limitations under the License. */
 #include <memory>
 #include <mutex>  // NOLINT
 #include <string>
+#include <unordered_set>
 #include <vector>
 #include "paddle/fluid/framework/data_set.h"
 #include "paddle/fluid/platform/timer.h"
@@ -54,6 +55,30 @@ class BoxWrapper {
                       const std::vector<const float*>& grad_values,
                       const std::vector<int64_t>& slot_lengths,
                       const int hidden_size);
+  void InitializeGPU(const char* conf_file) {
+    if (nullptr != s_instance_) {
+      PADDLEBOX_LOG << "Begin InitializeGPU";
+#ifdef PADDLE_WITH_BOX_PS
+      std::vector<cudaStream_t*> stream_list;
+      for (int i = 0; i < platform::GetCUDADeviceCount(); ++i) {
+        VLOG(3) << "before get context i[" << i << "]";
+        platform::CUDADeviceContext* context =
+            dynamic_cast<platform::CUDADeviceContext*>(
+                platform::DeviceContextPool::Instance().Get(
+                    platform::CUDAPlace(i)));
+        PADDLEBOX_LOG << "after get cuda context for card [" << i << "]";
+        PADDLE_ENFORCE_EQ(context == nullptr, false, "context is nullptr");
+
+        stream_list_[i] = context->stream();
+        stream_list.push_back(&stream_list_[i]);
+      }
+      PADDLEBOX_LOG << "call InitializeGPU in boxps";
+      // the second parameter is useless
+      s_instance_->boxps_ptr_->InitializeGPU(conf_file, -1, stream_list);
+      PADDLEBOX_LOG << "return from InitializeGPU in boxps";
+#endif
+    }
+  }
   void Finalize() {
     if (nullptr != s_instance_) {
       s_instance_->boxps_ptr_->Finalize();
@@ -71,30 +96,7 @@ class BoxWrapper {
         VLOG(3) << "s_instance_ is null";
         s_instance_.reset(new paddle::framework::BoxWrapper());
 #ifdef PADDLE_WITH_BOX_PS
-        // s_instance_->boxps_ptr_.reset(new boxps::PaddleBoxPS());
-        std::vector<cudaStream_t*> stream_list;
-        VLOG(3) << "Enter for";
-        // VLOG(3) << "CUDA_VISIBLE_DEVICES[" <<
-        // std::getenv("CUDA_VISIBLE_DEVICES") << "]";
-        for (int i = 0; i < platform::GetCUDADeviceCount(); ++i) {
-          VLOG(3) << "before get context i[" << i << "]";
-          platform::CUDADeviceContext* context =
-              dynamic_cast<platform::CUDADeviceContext*>(
-                  platform::DeviceContextPool::Instance().Get(
-                      platform::CUDAPlace(i)));
-          VLOG(3) << "after get context i[" << i << "]";
-          PADDLE_ENFORCE_EQ(context == nullptr, false, "context is nullptr");
-
-          stream_list_[i] = context->stream();
-          VLOG(3) << "after get stream i[" << i << "]";
-          stream_list.push_back(&stream_list_[i]);
-        }
-        VLOG(3) << "before call InitializeGPU";
-        // s_instance_->boxps_ptr_.reset(new boxps::PaddleBoxPS());
         s_instance_->boxps_ptr_.reset(boxps::BoxPSBase::GetIns());
-        s_instance_->boxps_ptr_->InitializeGPU("./conf/db.yaml", 32,
-                                               stream_list);
-        VLOG(3) << "after call InitializeGPU";
 #endif
       }
     }
@@ -162,6 +164,7 @@ class BoxHelper {
         dynamic_cast<MultiSlotDataset*>(dataset_)->GetInputChannel();
     std::vector<Record> pass_data;
     std::vector<uint64_t> feasign_to_box;
+    std::unordered_set<uint64_t> feasign_to_box_set;
     input_channel_->ReadAll(pass_data);
 
     auto& index_map = dataset_->GetReaders()[0]->index_omited_in_feedpass_;
@@ -171,9 +174,10 @@ class BoxHelper {
         if (index_map.find(feasign.slot()) != index_map.end()) {
           continue;
         }
-        feasign_to_box.push_back(feasign.sign().uint64_feasign_);
+        feasign_to_box_set.insert(feasign.sign().uint64_feasign_);
       }
     }
+    feasign_to_box.assign(feasign_to_box_set.begin(), feasign_to_box_set.end());
     input_channel_->Open();
     input_channel_->Write(pass_data);
     input_channel_->Close();

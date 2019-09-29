@@ -28,5 +28,11 @@ class BoxWrapper(object):
     def save_model(self):
         self.box_wrapper.save_model()
 
+    def initialize_gpu(self, conf_file):
+        if not isinstance(conf_file, str):
+            raise TypeError(
+                "conf_file in parameter of initialize_gpu should be str")
+        self.box_wrapper.initialize_gpu(conf_file)
+
     def finalize(self):
         self.box_wrapper.finalize()

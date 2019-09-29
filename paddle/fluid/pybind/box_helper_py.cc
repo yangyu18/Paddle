@@ -55,6 +55,7 @@ void BindBoxWrapper(py::module* m) {
         return framework::BoxWrapper::GetInstance();
       }))
       .def("save_model", &framework::BoxWrapper::SaveModel)
+      .def("initialize_gpu", &framework::BoxWrapper::InitializeGPU)
       .def("finalize", &framework::BoxWrapper::Finalize);
 }  // end BoxWrapper
 }  // end namespace pybind
