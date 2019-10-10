@@ -164,7 +164,6 @@ class BoxHelper {
         dynamic_cast<MultiSlotDataset*>(dataset_)->GetInputChannel();
     std::vector<Record> pass_data;
     std::vector<uint64_t> feasign_to_box;
-    std::unordered_set<uint64_t> feasign_to_box_set;
     input_channel_->ReadAll(pass_data);
 
     auto& index_map = dataset_->GetReaders()[0]->index_omited_in_feedpass_;
@@ -174,10 +173,9 @@ class BoxHelper {
         if (index_map.find(feasign.slot()) != index_map.end()) {
           continue;
         }
-        feasign_to_box_set.insert(feasign.sign().uint64_feasign_);
+	feasign_to_box.push_back(feasign.sign().uint64_feasign_);
       }
     }
-    feasign_to_box.assign(feasign_to_box_set.begin(), feasign_to_box_set.end());
     input_channel_->Open();
     input_channel_->Write(pass_data);
     input_channel_->Close();
