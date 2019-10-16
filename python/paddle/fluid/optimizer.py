@@ -2962,7 +2962,11 @@ class PipelineOptimizer(object):
             for p in section_var:
                 if p in whole_parameters or \
                         p[0:5] == "learn" or \
-                        p[0:6] == "sync_p":
+                        p[0:6] == "sync_p" or \
+			p.find("beta1_pow_acc_") != -1 or \
+			p.find("beta2_pow_acc_") != -1 or \
+			p.find("moment1_") != -1 or \
+			p.find("moment2_") != -1:
                     #Workaround(learn): copy lr to all gpu
                     #Workaround(sync_p): copy sync_push to all gpu
                     param_need_sync.append(p)
