@@ -48,7 +48,7 @@ int BoxWrapper::GetDate() const {
 
 __global__ void PullCopy(float** dest, abacus::FeatureValueGpu* src,
                          int64_t* len, int hidden, int slot_num,
-                         int total_len) {
+                         int total_len, uint64_t **keys) {
   CUDA_KERNEL_LOOP(i, total_len) {
     int low = 0;
     int high = slot_num - 1;
@@ -64,7 +64,7 @@ __global__ void PullCopy(float** dest, abacus::FeatureValueGpu* src,
     *(dest[x] + y * hidden) = (src + i)->show;
     *(dest[x] + y * hidden + 1) = (src + i)->clk;
     *(dest[x] + y * hidden + 2) = (src + i)->embed_w;
-    if ((src+i)->embedding_size == 0) {
+    if ((src+i)->embedding_size == 0 || *(keys[x] + y) == 0) {
       for (int j = 0; j < 8; j++) {
         *(dest[x] + y * hidden + 3 + j) = 0;
       }
@@ -221,18 +221,21 @@ void BoxWrapper::PullSparse(const paddle::platform::Place& place,
     for (int i = 1; i < slot_lengths_lod.size(); i++) {
       slot_lengths_lod[i] += slot_lengths_lod[i - 1];
     }
+    auto buf_key = memory::AllocShared(place, keys.size() * sizeof(uint64_t*));
     auto buf1 = memory::AllocShared(place, values.size() * sizeof(float*));
     auto buf2 =
         memory::AllocShared(place, slot_lengths.size() * sizeof(int64_t));
+    uint64_t **gpu_keys = reinterpret_cast<uint64_t**>(buf_key->ptr());
     float** gpu_values = reinterpret_cast<float**>(buf1->ptr());
     int64_t* gpu_len = reinterpret_cast<int64_t*>(buf2->ptr());
+    cudaMemcpy(gpu_keys, keys.data(), keys.size() * sizeof(uint64_t*), cudaMemcpyHostToDevice);
     cudaMemcpy(gpu_values, values.data(), values.size() * sizeof(float*),
                cudaMemcpyHostToDevice);
     cudaMemcpy(gpu_len, slot_lengths_lod.data(),
                slot_lengths.size() * sizeof(int64_t), cudaMemcpyHostToDevice);
     PullCopy<<<(total_length + 512 - 1) / 512, 512, 0, stream>>>(
         gpu_values, total_values_gpu, gpu_len, hidden_size, slot_lengths.size(),
-        total_length);
+        total_length, gpu_keys);
     cudaStreamSynchronize(stream);
     all_timer.Pause();
 
