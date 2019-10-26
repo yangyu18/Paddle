@@ -235,7 +235,7 @@ void PipelineTrainer::construct_sync_functor() {
 void PipelineTrainer::Run() {
   VLOG(3) << "Going to run";
   auto box_ptr = BoxWrapper::GetInstance();
-  box_ptr->ResetClickNum();
+  box_ptr->cal_->reset();
   for (int i = 0; i < section_num_; ++i) {
     for (int j = 0; j < pipeline_num_; ++j) {
       for (size_t k = 0; k < workers_[i][j].size(); ++k) {
@@ -256,7 +256,18 @@ void PipelineTrainer::Finalize() {
     th.join();
   }
   auto box_ptr = BoxWrapper::GetInstance();
-  box_ptr->PrintClickNum();
+  box_ptr->cal_->calculate_bucket_error();
+  box_ptr->cal_->compute();
+  fprintf(stderr,
+          "%s: AUC=%.6f BUCKET_ERROR=%.6f MAE=%.6f RMSE=%.6f "
+          "Actual CTR=%.6f Predicted CTR=%.6f COPC=%.6f INS Count=%.0f\n",
+          box_ptr->cal_->is_join++ % 2 ? "pass_ctr_join_model"
+                                       : "pass_ctr_update_model",
+          box_ptr->cal_->auc(), box_ptr->cal_->bucket_error(),
+          box_ptr->cal_->mae(), box_ptr->cal_->rmse(),
+          box_ptr->cal_->actual_ctr(), box_ptr->cal_->predicted_ctr(),
+          box_ptr->cal_->actual_ctr() / box_ptr->cal_->predicted_ctr(),
+          box_ptr->cal_->size());
   for (const auto& var : *param_need_sync_) {
     auto* root_tensor = root_scope_->Var(var)->GetMutable<LoDTensor>();
     // TODO(hutuxian): Add a final all-reduce?

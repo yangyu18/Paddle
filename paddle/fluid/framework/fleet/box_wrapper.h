@@ -15,6 +15,7 @@ limitations under the License. */
 #pragma once
 
 #include <glog/logging.h>
+#include <algorithm>
 #include <atomic>
 #include <memory>
 #include <mutex>  // NOLINT
@@ -33,6 +34,79 @@ namespace paddle {
 namespace framework {
 
 #define PADDLEBOX_LOG VLOG(0) << "PaddleBox: "
+class BasicAucCalculator {
+ public:
+  BasicAucCalculator() {}
+  void init(int table_size) {
+    set_table_size(table_size);
+    is_join = 1;
+  }
+  void reset() {
+    for (int i = 0; i < 2; i++) {
+      _table[i].assign(_table_size, 0.0);
+    }
+    _local_abserr = 0;
+    _local_sqrerr = 0;
+    _local_pred = 0;
+  }
+  void add_data(double pred, int label) {
+    PADDLE_ENFORCE(pred >= 0.0, "pred should be greater than 0");
+    PADDLE_ENFORCE(pred <= 1.0, "pred should be lower than 1");
+    PADDLE_ENFORCE((label == 0 || label == 1),
+                   "label must be equal to 0 or 1, but its value is: %d",
+                   label);
+    int pos = std::min(static_cast<int>(pred * _table_size), _table_size - 1);
+    PADDLE_ENFORCE(pos >= 0 && pos < _table_size,
+                   "pos must in range [0, _table_size)");
+    std::lock_guard<std::mutex> lock(_table_mutex);
+    _local_abserr += fabs(pred - label);
+    _local_sqrerr += (pred - label) * (pred - label);
+    _local_pred += pred;
+    _table[label][pos]++;
+  }
+  void compute();
+  int table_size() const { return _table_size; }
+  double bucket_error() const { return _bucket_error; }
+  double auc() const { return _auc; }
+  double mae() const { return _mae; }
+  double actual_ctr() const { return _actual_ctr; }
+  double predicted_ctr() const { return _predicted_ctr; }
+  double size() const { return _size; }
+  double rmse() const { return _rmse; }
+  std::vector<double>& get_negative() { return _table[0]; }
+  std::vector<double>& get_postive() { return _table[1]; }
+  double& local_abserr() { return _local_abserr; }
+  double& local_sqrerr() { return _local_sqrerr; }
+  double& local_pred() { return _local_pred; }
+  void calculate_bucket_error();
+  int is_join;
+
+ protected:
+  double _local_abserr = 0;
+  double _local_sqrerr = 0;
+  double _local_pred = 0;
+  double _auc = 0;
+  double _mae = 0;
+  double _rmse = 0;
+  double _actual_ctr = 0;
+  double _predicted_ctr = 0;
+  double _size;
+  double _bucket_error = 0;
+
+ private:
+  void set_table_size(int table_size) {
+    _table_size = table_size;
+    for (int i = 0; i < 2; i++) {
+      _table[i] = std::vector<double>();
+    }
+    reset();
+  }
+  int _table_size;
+  std::vector<double> _table[2];
+  static constexpr double kRelativeErrorBound = 0.05;
+  static constexpr double kMaxSpan = 0.01;
+  std::mutex _table_mutex;
+};
 
 class BoxWrapper {
  public:
@@ -95,6 +169,8 @@ class BoxWrapper {
       if (nullptr == s_instance_) {
         VLOG(3) << "s_instance_ is null";
         s_instance_.reset(new paddle::framework::BoxWrapper());
+        s_instance_->cal_.reset(new BasicAucCalculator());
+        s_instance_->cal_->init(1000000);
 #ifdef PADDLE_WITH_BOX_PS
         s_instance_->boxps_ptr_.reset(boxps::BoxPSBase::GetIns());
 #endif
@@ -114,6 +190,9 @@ class BoxWrapper {
   std::atomic<int64_t> actual_click;
   float pred_click;
   std::mutex add_mutex;
+
+ public:
+  static std::shared_ptr<BasicAucCalculator> cal_;
 };
 
 class BoxHelper {
@@ -173,7 +252,7 @@ class BoxHelper {
         if (index_map.find(feasign.slot()) != index_map.end()) {
           continue;
         }
-	feasign_to_box.push_back(feasign.sign().uint64_feasign_);
+        feasign_to_box.push_back(feasign.sign().uint64_feasign_);
       }
     }
     input_channel_->Open();

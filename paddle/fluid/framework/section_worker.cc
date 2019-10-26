@@ -206,23 +206,25 @@ void SectionWorker::TrainFiles() {
     // No effect when it is a CPUDeviceContext
     dev_ctx_->Wait();
 
-    // Workaround for actual click and pred click
-    auto* actual_var = exe_scope->FindVar("reduce_sum_1.tmp_0");
-    auto* pred_var = exe_scope->FindVar("reduce_sum_0.tmp_0");
-    if (actual_var != nullptr && pred_var != nullptr) {
-      auto& actual_tensor = actual_var->Get<LoDTensor>();
-      auto& pred_tensor = pred_var->Get<LoDTensor>();
+    // Workaround for print paddlebox metrics
+    auto* click = exe_scope->FindVar("click");
+    auto* predict = exe_scope->FindVar("ctr_sigmoid.tmp_0");
+    if (click != nullptr && predict != nullptr) {
+      auto& actual_tensor = click->Get<LoDTensor>();
+      auto& pred_tensor = predict->Get<LoDTensor>();
       auto* gpu_actual_data = actual_tensor.data<int64_t>();
       auto* gpu_pred_data = pred_tensor.data<float>();
       auto box_ptr = BoxWrapper::GetInstance();
-      int64_t actual_data;
-      float pred_data;
-      cudaMemcpy(&actual_data, gpu_actual_data, sizeof(int64_t),
+      int64_t actual_data[4099];
+      float pred_data[4099];
+      auto len = actual_tensor.numel();
+      cudaMemcpy(actual_data, gpu_actual_data, sizeof(int64_t) * len,
                  cudaMemcpyDeviceToHost);
-      cudaMemcpy(&pred_data, gpu_pred_data, sizeof(float),
+      cudaMemcpy(pred_data, gpu_pred_data, sizeof(float) * len,
                  cudaMemcpyDeviceToHost);
-      SEC_LOG << "act click:" << actual_data << ", pred click: " << pred_data;
-      box_ptr->UpdateClickNum(actual_data, pred_data);
+      for (auto i = 0; i < len; ++i) {
+        box_ptr->cal_->add_data(pred_data[i], actual_data[i]);
+      }
     }
 
     if (section_id_ != section_num_ - 1 && platform::is_gpu_place(place_)) {

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algorithm>
 #include <ctime>
 #include <memory>
 #include <numeric>
@@ -23,11 +24,69 @@ namespace paddle {
 namespace framework {
 
 std::shared_ptr<BoxWrapper> BoxWrapper::s_instance_ = nullptr;
+std::shared_ptr<BasicAucCalculator> BoxWrapper::cal_ = nullptr;
 #ifdef PADDLE_WITH_BOX_PS
 cudaStream_t BoxWrapper::stream_list_[8];
 std::shared_ptr<boxps::BoxPSBase> BoxWrapper::boxps_ptr_ = nullptr;
 #endif
 
+void BasicAucCalculator::compute() {
+  double* table[2] = {&_table[0][0], &_table[1][0]};
+
+  double area = 0;
+  double fp = 0;
+  double tp = 0;
+
+  for (int i = _table_size - 1; i >= 0; i--) {
+    double newfp = fp + table[0][i];
+    double newtp = tp + table[1][i];
+    area += (newfp - fp) * (tp + newtp) / 2;
+    fp = newfp;
+    tp = newtp;
+  }
+
+  _auc = area / (fp * tp);
+
+  _mae = _local_abserr / (fp + tp);
+  _rmse = sqrt(_local_sqrerr / (fp + tp));
+  _actual_ctr = tp / (fp + tp);
+  _predicted_ctr = _local_pred / (fp + tp);
+  _size = fp + tp;
+}
+void BasicAucCalculator::calculate_bucket_error() {
+  double last_ctr = -1;
+  double impression_sum = 0;
+  double ctr_sum = 0.0;
+  double click_sum = 0.0;
+  double error_sum = 0.0;
+  double error_count = 0;
+  double* table[2] = {&_table[0][0], &_table[1][0]};
+  for (int i = 0; i < _table_size; i++) {
+    double click = table[1][i];
+    double show = table[0][i] + table[1][i];
+    double ctr = static_cast<double>(i) / _table_size;
+    if (fabs(ctr - last_ctr) > kMaxSpan) {
+      last_ctr = ctr;
+      impression_sum = 0.0;
+      ctr_sum = 0.0;
+      click_sum = 0.0;
+    }
+    impression_sum += show;
+    ctr_sum += ctr * show;
+    click_sum += click;
+    double adjust_ctr = ctr_sum / impression_sum;
+    double relative_error =
+        sqrt((1 - adjust_ctr) / (adjust_ctr * impression_sum));
+    if (relative_error < kRelativeErrorBound) {
+      double actual_ctr = click_sum / impression_sum;
+      double relative_ctr_error = fabs(actual_ctr / adjust_ctr - 1);
+      error_sum += relative_ctr_error * impression_sum;
+      error_count += impression_sum;
+      last_ctr = -1;
+    }
+  }
+  _bucket_error = error_count > 0 ? error_sum / error_count : 0.0;
+}
 int BoxWrapper::GetDate() const {
   time_t now = time(0);
   tm t;
@@ -47,8 +106,8 @@ int BoxWrapper::GetDate() const {
        i += blockDim.x * gridDim.x)
 
 __global__ void PullCopy(float** dest, abacus::FeatureValueGpu* src,
-                         int64_t* len, int hidden, int slot_num,
-                         int total_len, uint64_t **keys) {
+                         int64_t* len, int hidden, int slot_num, int total_len,
+                         uint64_t** keys) {
   CUDA_KERNEL_LOOP(i, total_len) {
     int low = 0;
     int high = slot_num - 1;
@@ -64,11 +123,11 @@ __global__ void PullCopy(float** dest, abacus::FeatureValueGpu* src,
     *(dest[x] + y * hidden) = (src + i)->show;
     *(dest[x] + y * hidden + 1) = (src + i)->clk;
     *(dest[x] + y * hidden + 2) = (src + i)->embed_w;
-    if ((src+i)->embedding_size == 0 || *(keys[x] + y) == 0) {
+    if ((src + i)->embedding_size == 0 || *(keys[x] + y) == 0) {
       for (int j = 0; j < 8; j++) {
         *(dest[x] + y * hidden + 3 + j) = 0;
       }
-    } else{ 
+    } else {
       for (int j = 0; j < 8; j++) {
         *(dest[x] + y * hidden + 3 + j) = (src + i)->embedx[1 + j];
       }
@@ -98,25 +157,6 @@ __global__ void PushCopy(abacus::FeaturePushValueGpu* dest, float** src,
       (dest + i)->embedx_g[j] = *(src[x] + y * hidden + 3 + j);
     }
   }
-}
-
-void BoxWrapper::ResetClickNum() {
-  actual_click.store(0);
-  std::lock_guard<std::mutex> lock(add_mutex);
-  pred_click = 0.0;
-}
-
-void BoxWrapper::UpdateClickNum(int64_t actual_val, float pred_val) {
-  actual_click.fetch_add(actual_val);
-  std::lock_guard<std::mutex> lock(add_mutex);
-  pred_click += pred_val;
-}
-
-void BoxWrapper::PrintClickNum() const {
-  auto actual_val = actual_click.load();
-  auto pred_val = pred_click;
-  printf("actual click: %ld, pred click: %lf\n", actual_val, pred_val);
-  printf("COPC: %lf\n", static_cast<float>(actual_val) / pred_val);
 }
 
 void BoxWrapper::FeedPass(const std::vector<uint64_t>& feasgin_to_box) const {
@@ -225,10 +265,11 @@ void BoxWrapper::PullSparse(const paddle::platform::Place& place,
     auto buf1 = memory::AllocShared(place, values.size() * sizeof(float*));
     auto buf2 =
         memory::AllocShared(place, slot_lengths.size() * sizeof(int64_t));
-    uint64_t **gpu_keys = reinterpret_cast<uint64_t**>(buf_key->ptr());
+    uint64_t** gpu_keys = reinterpret_cast<uint64_t**>(buf_key->ptr());
     float** gpu_values = reinterpret_cast<float**>(buf1->ptr());
     int64_t* gpu_len = reinterpret_cast<int64_t*>(buf2->ptr());
-    cudaMemcpy(gpu_keys, keys.data(), keys.size() * sizeof(uint64_t*), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_keys, keys.data(), keys.size() * sizeof(uint64_t*),
+               cudaMemcpyHostToDevice);
     cudaMemcpy(gpu_values, values.data(), values.size() * sizeof(float*),
                cudaMemcpyHostToDevice);
     cudaMemcpy(gpu_len, slot_lengths_lod.data(),
