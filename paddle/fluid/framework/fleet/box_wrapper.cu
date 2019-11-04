@@ -152,9 +152,9 @@ __global__ void PushCopy(abacus::FeaturePushValueGpu* dest, float** src,
     int y = i - (x ? len[low - 1] : 0);
     (dest + i)->show = *(src[x] + y * hidden);
     (dest + i)->clk = *(src[x] + y * hidden + 1);
-    (dest + i)->embed_g = *(src[x] + y * hidden + 2);
+    (dest + i)->embed_g = *(src[x] + y * hidden + 2) * -1.;
     for (int j = 0; j < 8; j++) {
-      (dest + i)->embedx_g[j] = *(src[x] + y * hidden + 3 + j);
+      (dest + i)->embedx_g[j] = *(src[x] + y * hidden + 3 + j) * -1.;
     }
   }
 }
