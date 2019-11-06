@@ -45,7 +45,11 @@ void BasicAucCalculator::compute() {
     tp = newtp;
   }
 
-  _auc = area / (fp * tp);
+  if (fp < 1e-3 || tp < 1e-3) {
+    _auc = -0.5; // which means all nonclick or click
+  } else {
+    _auc = area / (fp * tp);
+  }
 
   _mae = _local_abserr / (fp + tp);
   _rmse = sqrt(_local_sqrerr / (fp + tp));
