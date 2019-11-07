@@ -163,9 +163,9 @@ __global__ void PushCopy(abacus::FeaturePushValueGpu* dest, float** src,
   }
 }
 
-void BoxWrapper::FeedPass(const std::vector<uint64_t>& feasgin_to_box) const {
+void BoxWrapper::FeedPass(int date, const std::vector<uint64_t>& feasgin_to_box) const {
 #ifdef PADDLE_WITH_BOX_PS
-  int ret = boxps_ptr_->FeedPass(GetDate(), feasgin_to_box);
+  int ret = boxps_ptr_->FeedPass(date, feasgin_to_box);
   PADDLE_ENFORCE_EQ(ret, 0, "FeedPass failed in BoxPS.");
 #endif
 }

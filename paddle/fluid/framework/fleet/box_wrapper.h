@@ -21,6 +21,7 @@ limitations under the License. */
 #include <mutex>  // NOLINT
 #include <string>
 #include <unordered_set>
+#include <ctime>
 #include <vector>
 #include "paddle/fluid/framework/data_set.h"
 #include "paddle/fluid/platform/timer.h"
@@ -113,7 +114,7 @@ class BoxWrapper {
   virtual ~BoxWrapper() {}
   BoxWrapper() {}
 
-  void FeedPass(const std::vector<uint64_t>& feasgin_to_box) const;
+  void FeedPass(int date, const std::vector<uint64_t>& feasgin_to_box) const;
   void BeginPass() const;
   void EndPass() const;
   void ResetClickNum();
@@ -197,7 +198,7 @@ class BoxWrapper {
 
 class BoxHelper {
  public:
-  explicit BoxHelper(paddle::framework::Dataset* dataset) : dataset_(dataset) {}
+  explicit BoxHelper(paddle::framework::Dataset* dataset, int year, int month, int day) : dataset_(dataset), year_(year), month_(month), day_(day) {}
   virtual ~BoxHelper() {}
 
   void BeginPass() {
@@ -236,6 +237,9 @@ class BoxHelper {
  private:
   Dataset* dataset_;
   std::shared_ptr<std::thread> feed_data_thread_;
+  int year_;
+  int month_;
+  int day_;
   // notify boxps to feed this pass feasigns from SSD to memory
   void FeedPass() {
     auto box_ptr = BoxWrapper::GetInstance();
@@ -259,7 +263,14 @@ class BoxHelper {
     input_channel_->Write(pass_data);
     input_channel_->Close();
     PADDLEBOX_LOG << "call boxps feedpass";
-    box_ptr->FeedPass(feasign_to_box);
+    //struct std::tm b = {0,0,0,day_,month_ - 1,year_ - 1900}; /* July 5, 2004 */
+    struct std::tm b;
+    b.tm_year = year_ - 1900;
+    b.tm_mon = month_ - 1;
+    b.tm_mday = day_;
+    b.tm_min = b.tm_hour = b.tm_sec = 0;
+    std::time_t x = std::mktime(&b);
+    box_ptr->FeedPass(x / 86400, feasign_to_box);
     PADDLEBOX_LOG << "return from boxps feedpass";
   }
 };

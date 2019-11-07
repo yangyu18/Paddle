@@ -37,8 +37,8 @@ namespace pybind {
 void BindBoxHelper(py::module* m) {
   py::class_<framework::BoxHelper, std::shared_ptr<framework::BoxHelper>>(
       *m, "BoxPS")
-      .def(py::init([](paddle::framework::Dataset* dataset) {
-        return std::make_shared<paddle::framework::BoxHelper>(dataset);
+      .def(py::init([](paddle::framework::Dataset* dataset, int year, int month, int day) {
+        return std::make_shared<paddle::framework::BoxHelper>(dataset, year, month, day);
       }))
       .def("begin_pass", &framework::BoxHelper::BeginPass)
       .def("end_pass", &framework::BoxHelper::EndPass)
