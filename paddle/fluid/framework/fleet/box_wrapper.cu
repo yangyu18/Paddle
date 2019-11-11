@@ -124,9 +124,15 @@ __global__ void PullCopy(float** dest, abacus::FeatureValueGpu* src,
     }
     int x = low;
     int y = i - (x ? len[x - 1] : 0);
-    *(dest[x] + y * hidden) = (src + i)->show;
-    *(dest[x] + y * hidden + 1) = (src + i)->clk;
-    *(dest[x] + y * hidden + 2) = (src + i)->embed_w;
+    if (*(keys[x] + y) == 0) {
+        *(dest[x] + y * hidden) = 0;
+        *(dest[x] + y * hidden + 1) = 0;
+        *(dest[x] + y * hidden + 2) = 0;
+    } else {
+        *(dest[x] + y * hidden) = (src + i)->show;
+        *(dest[x] + y * hidden + 1) = (src + i)->clk;
+        *(dest[x] + y * hidden + 2) = (src + i)->embed_w;
+    }
     if ((src + i)->embedding_size == 0 || *(keys[x] + y) == 0) {
       for (int j = 0; j < 8; j++) {
         *(dest[x] + y * hidden + 3 + j) = 0;
