@@ -31,6 +31,14 @@ limitations under the License. */
 #include <utility>
 #include <vector>
 
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/types.h>
+#include <semaphore.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+
 #include "paddle/fluid/framework/archive.h"
 #include "paddle/fluid/framework/blocking_queue.h"
 #include "paddle/fluid/framework/channel.h"
@@ -238,10 +246,12 @@ class InMemoryDataFeed : public DataFeed {
   virtual void SetParseInsId(bool parse_ins_id);
   virtual void SetParseContent(bool parse_content);
   virtual void LoadIntoMemory();
+  virtual void LoadIntoMemorySM();
 
  protected:
   virtual bool ParseOneInstance(T* instance) = 0;
   virtual bool ParseOneInstanceFromPipe(T* instance) = 0;
+  virtual bool ParseOneInstanceFromSM(T* instance) = 0;
   virtual void PutToFeedVec(const std::vector<T>& ins_vec) = 0;
 
   int thread_id_;
@@ -253,6 +263,29 @@ class InMemoryDataFeed : public DataFeed {
   paddle::framework::ChannelObject<T>* input_channel_;
   paddle::framework::ChannelObject<T>* output_channel_;
   paddle::framework::ChannelObject<T>* consume_channel_;
+ private:
+  static int CommShm(int size, int flags, int project_id) {
+    key_t key = ftok("./share_memory", project_id);
+    if (key < 0) {
+      perror("ftok");
+      return -1;
+    }
+    int shmid = 0;
+    if ((shmid = shmget(key, size, flags)) < 0) {
+      perror("shmget");
+      return -2;
+    }
+    return shmid;
+  }
+  int DestroyShm(int shmid) {
+    if (shmctl(shmid, IPC_RMID, NULL) < 0) {
+      perror("shmctl");
+      return -1;
+    }
+    return 0;
+  }
+  int CreateShm(int size, int project_id) { return CommShm(size, IPC_CREAT | IPC_EXCL | 0666, project_id); }
+  int GetShm(int size, int project_id) { return CommShm(size, IPC_CREAT, project_id); }
 };
 
 // This class define the data type of instance(ins_vec) in MultiSlotDataFeed

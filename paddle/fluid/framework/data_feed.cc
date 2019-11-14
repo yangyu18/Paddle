@@ -349,6 +349,114 @@ void InMemoryDataFeed<T>::LoadIntoMemory() {
 #endif
 }
 
+bool MultiSlotDataFeed::ParseOneInstanceFromSM(
+    std::vector<MultiSlotType>* instance, char** addr) {
+#ifdef _LINUX
+  int use_slots_num = use_slots_.size();
+  instance->resize(use_slots_num);
+
+  const char* str = addr;
+  // VLOG(3) << line;
+  char* endptr = const_cast<char*>(str);
+  int pos = 0;
+  for (size_t i = 0; i < use_slots_index_.size(); ++i) {
+    int idx = use_slots_index_[i];
+    int num = strtol(&str[pos], &endptr, 10);
+    PADDLE_ENFORCE(
+        num,
+        "The number of ids can not be zero, you need padding "
+        "it in data generator; or if there is something wrong with "
+        "the data, please check if the data contains unresolvable "
+        "characters.\nplease check this error line: %s",
+        str);
+    if (idx != -1) {
+      (*instance)[idx].Init(all_slots_type_[i]);
+      if ((*instance)[idx].GetType()[0] == 'f') {  // float
+        for (int j = 0; j < num; ++j) {
+          float feasign = strtof(endptr, &endptr);
+          (*instance)[idx].AddValue(feasign);
+        }
+      } else if ((*instance)[idx].GetType()[0] == 'u') {  // uint64
+        for (int j = 0; j < num; ++j) {
+          uint64_t feasign = (uint64_t)strtoull(endptr, &endptr, 10);
+          (*instance)[idx].AddValue(feasign);
+        }
+      }
+      pos = endptr - str;
+    } else {
+      for (int j = 0; j <= num; ++j) {
+        // pos = line.find_first_of(' ', pos + 1);
+        while (str[pos + 1] != ' ') {
+          pos++;
+        }
+      }
+    }
+  }
+  while(str[pos] != '\n'){
+    pos ++;
+  }
+  *addr = str + pos + 1;
+  return true;
+#else
+  return true;
+#endif
+}
+
+template <typename T>
+void InMemoryDataFeed<T>::LoadIntoMemorySM() {
+  VLOG(0) << "LoadIntoMemory() begin, thread_id=" << thread_id_;
+  std::string filename;
+  std::string sem_name = "sem_" + std::to_string(thread_id_);
+
+  sem_t *sem = NULL;
+  sem = sem_open(sem_name, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH, 0);
+  if (sem == SEM_FAILED )
+  {
+    printf("sem failed, errno = %d, thread_id is : %d\n", errno, thread_id_);
+    return -1;
+  }
+  int shmid = CreateShm(1024*1024*100, thread_id_);
+  char *start = (char*)shmat(shmid, NULL, 0);
+
+  while (this->PickOneFile(&filename)) {
+    VLOG(0) << "PickOneFile, filename=" << filename
+            << ", thread_id=" << thread_id_;
+    int pid = fork();
+    if (pid > 0) {
+      paddle::framework::ChannelWriter<T> writer(input_channel_);
+      T instance;
+      platform::Timer timeline;
+      timeline.Start();
+
+      char *addr = start;
+      while (true) {
+        sem_wait(sem);
+        if (*addr == '#') {
+          break;
+        }
+        bool is_succ = ParseOneInstanceFromSM(&instance, &addr);
+        PADDLE_ENFORCE(is_succ, "parse instance fail");
+        writer << std::move(instance);
+        instance = T();
+      }
+      writer.Flush();
+      timeline.Pause();
+      VLOG(3) << "LoadIntoMemory() read all lines, file=" << filename
+              << ", cost time=" << timeline.ElapsedSec()
+              << " seconds, thread_id=" << thread_id_;
+    } else {
+      std::string cmd = "hadoop fs -Dfs.default.name=hdfs://nmg01-taihang-hdfs.dmop.baidu.com:54310"
+                        " -Dhadoop.job.ugi=fcr,SaK2VqfEDeXzKPor -cat " + filename + " | ./my_data_generator slot.txt " + std::to_string(thread_num);
+      VLOG(0) << cmd;
+      int ret = execl("/bin/bash", "bash", "-c", cmd.c_str(), NULL);
+      PADDLE_ENFORCE_NE(res, -1, "sub process failed.");
+    }
+  }
+  DestroyShm(shmid);
+  VLOG(0) << "LoadIntoMemory() end, thread_id=" << thread_id_;
+}
+
+
 // explicit instantiation
 template class InMemoryDataFeed<Record>;
 
