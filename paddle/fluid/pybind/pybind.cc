@@ -2210,6 +2210,7 @@ All parameter, weight, gradient are variables in Paddle.
   BindGlooWrapper(&m);
   BindBoxHelper(&m);
   BindBoxWrapper(&m);
+  BindSaveModelStat(&m);
 #ifndef _WIN32
   BindNCCLWrapper(&m);
 #endif
