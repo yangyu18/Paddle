@@ -25,6 +25,7 @@ limitations under the License. */
 #include <set>
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 #include "paddle/fluid/framework/data_set.h"
 #include "paddle/fluid/framework/lod_tensor.h"
@@ -172,6 +173,35 @@ class BoxWrapper {
         stream_list.push_back(&stream_list_[i]);
       }
       PADDLEBOX_LOG << "call InitializeGPU in boxps";
+      {
+        std::vector<std::pair<std::string, std::vector<int>>> res;
+        res.push_back(std::make_pair(
+            "read_ssd_cpu_cores",
+            std::vector<int>{24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                             37, 38, 39, 40, 41, 42, 72, 73, 74, 75, 76, 77, 78,
+                             79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90}));
+        res.push_back(
+            std::make_pair("build_hbm_cpu_cores",
+                           std::vector<int>{0, 1, 2, 3, 4, 5, 6, 7, 48, 49, 50,
+                                            51, 52, 53, 54, 55}));
+        res.push_back(
+            std::make_pair("dump_hbm_cpu_cores",
+                           std::vector<int>{0, 1, 2, 3, 4, 5, 6, 7, 48, 49, 50,
+                                            51, 52, 53, 54, 55}));
+        res.push_back(std::make_pair(
+            "save_model_cpu_cores",
+            std::vector<int>{8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18,
+                             19, 20, 21, 22, 23, 43, 44, 45, 46, 47, 56,
+                             57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67,
+                             68, 69, 70, 71, 91, 92, 93, 94, 95}));
+        res.push_back(std::make_pair(
+            "sort_unique_cpu_cores",
+            std::vector<int>{8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18,
+                             19, 20, 21, 22, 23, 43, 44, 45, 46, 47, 56,
+                             57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67,
+                             68, 69, 70, 71, 91, 92, 93, 94, 95}));
+        s_instance_->boxps_ptr_->BindingCpuCores(res);
+      }
       // the second parameter is useless
       s_instance_->boxps_ptr_->InitializeGPU(conf_file, -1, stream_list);
       PADDLEBOX_LOG << "return from InitializeGPU in boxps";
@@ -355,11 +385,27 @@ class BoxHelper {
   void WaitFeedPassDone() { feed_data_thread_->join(); }
 
   // notify boxps to feed this pass feasigns from SSD to memory
+  static void AutoSetCPUAffinity(const std::vector<int>& cores) {
+    cpu_set_t mask;
+    CPU_ZERO(&mask);
+    for (size_t i = 0; i < cores.size(); ++i) {
+      CPU_SET(cores[i], &mask);
+    }
+    if (-1 == sched_setaffinity(0, sizeof(mask), &mask)) {
+      LOG(WARNING) << "Fail to set thread affinity to CPU ";
+      return;
+    }
+  }
 
   static void FeedPassThread(const std::deque<Record>& t, int begin_index,
                              int end_index, boxps::PSAgentBase* p_agent,
                              const std::unordered_set<int>& index_map,
                              int thread_id) {
+    std::vector<int> cores{8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18,
+                           19, 20, 21, 22, 23, 43, 44, 45, 46, 47, 56,
+                           57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67,
+                           68, 69, 70, 71, 91, 92, 93, 94, 95};
+    AutoSetCPUAffinity(cores);
     p_agent->AddKey(0ul, thread_id);
     for (auto iter = t.begin() + begin_index; iter != t.begin() + end_index;
          iter++) {
