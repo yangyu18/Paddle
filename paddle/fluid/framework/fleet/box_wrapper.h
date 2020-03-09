@@ -484,6 +484,20 @@ class BoxWrapper {
   std::vector<std::string> metric_name_list_;
   std::vector<int> slot_vector_;
   std::vector<LoDTensor> keys_tensor;  // Cache for pull_sparse
+
+  // All About Monitor Metric
+ public:
+  std::vector<uint64_t> GetMonitorStats() {
+    std::lock_guard<std::mutex> lock(monitor_mutex_);
+    std::vector<uint64_t> res;
+    res.push_back(stats_.total_ins_);
+    return res;
+  }
+  struct MonitorStats {
+    uint64_t total_ins_ = 0;
+  };
+  std::mutex monitor_mutex_;
+  MonitorStats stats_;
 };
 #endif
 

@@ -21,6 +21,7 @@
 #include "google/protobuf/message.h"
 #include "google/protobuf/text_format.h"
 #include "paddle/fluid/framework/data_feed_factory.h"
+#include "paddle/fluid/framework/fleet/box_wrapper.h"
 #include "paddle/fluid/framework/fleet/fleet_wrapper.h"
 #include "paddle/fluid/framework/io/fs.h"
 #include "paddle/fluid/platform/timer.h"
@@ -42,6 +43,7 @@ DatasetImpl<T>::DatasetImpl() {
   trainer_num_ = 1;
   channel_num_ = 1;
   file_idx_ = 0;
+  total_fea_num_ = 0;
   cur_channel_ = 0;
   fleet_send_batch_size_ = 1024;
   fleet_send_sleep_seconds_ = 0;
@@ -272,6 +274,14 @@ void DatasetImpl<T>::ReleaseMemory() {
   std::vector<paddle::framework::Channel<T>>().swap(multi_consume_channel_);
   std::vector<std::shared_ptr<paddle::framework::DataFeed>>().swap(readers_);
   VLOG(3) << "DatasetImpl<T>::ReleaseMemory() end";
+#ifdef PADDLE_WITH_BOX_PS
+  auto box_ptr = BoxWrapper::GetInstance();
+  std::lock_guard<std::mutex> lock(box_ptr->monitor_mutex_);
+  VLOG(0) << "total_ins_(" << box_ptr->stats_.total_ins_
+          << ") - total_fea_num_(" << total_fea_num_ << ") = ("
+          << box_ptr->stats_.total_ins_ - total_fea_num_ << ")";
+  box_ptr->stats_.total_ins_ -= total_fea_num_;
+#endif
 }
 
 // do local shuffle
@@ -525,6 +535,8 @@ void DatasetImpl<T>::CreateReaders() {
     readers_[i]->SetThreadNum(thread_num_);
     readers_[i]->SetFileListMutex(&mutex_for_pick_file_);
     readers_[i]->SetFileListIndex(&file_idx_);
+    readers_[i]->SetFeaNumMutex(&mutex_for_fea_num_);
+    readers_[i]->SetFeaNum(&total_fea_num_);
     readers_[i]->SetFileList(filelist_);
     readers_[i]->SetParseInsId(parse_ins_id_);
     readers_[i]->SetParseContent(parse_content_);

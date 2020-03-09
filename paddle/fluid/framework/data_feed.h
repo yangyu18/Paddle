@@ -63,6 +63,8 @@ class DataFeed {
   DataFeed() {
     mutex_for_pick_file_ = nullptr;
     file_idx_ = nullptr;
+    mutex_for_fea_num_ = nullptr;
+    total_fea_num_ = nullptr;
   }
   virtual ~DataFeed() {}
   virtual void Init(const DataFeedDesc& data_feed_desc) = 0;
@@ -109,7 +111,9 @@ class DataFeed {
   virtual void SetFileListMutex(std::mutex* mutex) {
     mutex_for_pick_file_ = mutex;
   }
+  virtual void SetFeaNumMutex(std::mutex* mutex) { mutex_for_fea_num_ = mutex; }
   virtual void SetFileListIndex(size_t* file_index) { file_idx_ = file_index; }
+  virtual void SetFeaNum(uint64_t* fea_num) { total_fea_num_ = fea_num; }
   virtual const std::vector<std::string>& GetInsIdVec() const {
     return ins_id_vec_;
   }
@@ -142,6 +146,8 @@ class DataFeed {
   std::vector<std::string> filelist_;
   size_t* file_idx_;
   std::mutex* mutex_for_pick_file_;
+  std::mutex* mutex_for_fea_num_ = nullptr;
+  uint64_t* total_fea_num_ = nullptr;
 
   // the alias of used slots, and its order is determined by
   // data_feed_desc(proto object)
@@ -237,7 +243,7 @@ class InMemoryDataFeed : public DataFeed {
 
  protected:
   virtual bool ParseOneInstance(T* instance) = 0;
-  virtual bool ParseOneInstanceFromPipe(T* instance) = 0;
+  virtual bool ParseOneInstanceFromPipe(T* instance, int* fea_num) = 0;
   virtual void PutToFeedVec(const std::vector<T>& ins_vec) = 0;
 
   int thread_id_;
@@ -555,7 +561,7 @@ class MultiSlotInMemoryDataFeed : public InMemoryDataFeed<Record> {
 
  protected:
   virtual bool ParseOneInstance(Record* instance);
-  virtual bool ParseOneInstanceFromPipe(Record* instance);
+  virtual bool ParseOneInstanceFromPipe(Record* instance, int* fea_num);
   virtual void PutToFeedVec(const std::vector<Record>& ins_vec);
 };
 

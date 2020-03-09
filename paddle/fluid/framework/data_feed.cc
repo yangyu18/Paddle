@@ -33,6 +33,7 @@ limitations under the License. */
 #include "io/shell.h"
 #include "paddle/fluid/framework/feed_fetch_method.h"
 #include "paddle/fluid/framework/feed_fetch_type.h"
+#include "paddle/fluid/framework/fleet/box_wrapper.h"
 #include "paddle/fluid/framework/fleet/fleet_wrapper.h"
 #include "paddle/fluid/platform/timer.h"
 
@@ -341,10 +342,22 @@ void InMemoryDataFeed<T>::LoadIntoMemory() {
     T instance;
     platform::Timer timeline;
     timeline.Start();
-    while (ParseOneInstanceFromPipe(&instance)) {
+    int fea_num = 0;
+    int total_num = 0;
+    while (ParseOneInstanceFromPipe(&instance, &fea_num)) {
       writer << std::move(instance);
       instance = T();
+      total_num += fea_num;
     }
+#ifdef PADDLE_WITH_BOX_PS
+    {
+      auto box_ptr = BoxWrapper::GetInstance();
+      std::lock_guard<std::mutex> lock(box_ptr->monitor_mutex_);
+      box_ptr->stats_.total_ins_ += total_num;
+      std::lock_guard<std::mutex> flock(*mutex_for_fea_num_);
+      *total_fea_num_ += total_num;
+    }
+#endif
     writer.Flush();
     timeline.Pause();
     VLOG(3) << "LoadIntoMemory() read all lines, file=" << filename
@@ -756,7 +769,8 @@ void MultiSlotInMemoryDataFeed::Init(
   finish_init_ = true;
 }
 
-bool MultiSlotInMemoryDataFeed::ParseOneInstanceFromPipe(Record* instance) {
+bool MultiSlotInMemoryDataFeed::ParseOneInstanceFromPipe(Record* instance,
+                                                         int* fea_num) {
 #ifdef _LINUX
   thread_local string::LineFileReader reader;
 
@@ -840,6 +854,7 @@ bool MultiSlotInMemoryDataFeed::ParseOneInstanceFromPipe(Record* instance) {
     }
     instance->float_feasigns_.shrink_to_fit();
     instance->uint64_feasigns_.shrink_to_fit();
+    *fea_num = instance->uint64_feasigns_.size();
     return true;
   }
 #else

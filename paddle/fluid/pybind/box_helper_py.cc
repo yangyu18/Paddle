@@ -82,6 +82,8 @@ void BindBoxWrapper(py::module* m) {
       .def("flip_pass_flag", &framework::BoxWrapper::FlipPassFlag,
            py::call_guard<py::gil_scoped_release>())
       .def("finalize", &framework::BoxWrapper::Finalize,
+           py::call_guard<py::gil_scoped_release>())
+      .def("get_monitor_stats", &framework::BoxWrapper::GetMonitorStats,
            py::call_guard<py::gil_scoped_release>());
 }  // end BoxWrapper
 #endif
