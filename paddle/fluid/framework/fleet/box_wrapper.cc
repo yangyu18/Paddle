@@ -171,11 +171,13 @@ void BoxWrapper::PullSparse(const paddle::platform::Place& place,
                    static_cast<int>(total_length));
     VLOG(3) << "Begin call PullSparseGPU in BoxPS";
     pull_boxps_timer.Start();
+    /*
     int ret =
         boxps_ptr_->PullSparseGPU(total_keys, total_values_gpu,
                                   static_cast<int>(total_length), device_id);
     PADDLE_ENFORCE_EQ(ret, 0, platform::errors::PreconditionNotMet(
                                   "PullSparseGPU failed in BoxPS."));
+    */
     pull_boxps_timer.Pause();
 
     VLOG(3) << "Begin Copy result to tensor, total_length[" << total_length
@@ -219,21 +221,25 @@ void BoxWrapper::PushSparseGrad(const paddle::platform::Place& place,
         "Warning:: CPUPlace is not supported in PaddleBox now."));
   } else if (platform::is_gpu_place(place)) {
 #if defined(PADDLE_WITH_CUDA) && !defined(_WIN32)
-    int device_id = boost::get<platform::CUDAPlace>(place).GetDeviceId();
-    LoDTensor& cached_total_keys_tensor = keys_tensor[device_id];
-    uint64_t* total_keys =
-        reinterpret_cast<uint64_t*>(cached_total_keys_tensor.data<int64_t>());
+    /*
+  int device_id = boost::get<platform::CUDAPlace>(place).GetDeviceId();
+  LoDTensor& cached_total_keys_tensor = keys_tensor[device_id];
+  uint64_t* total_keys =
+      reinterpret_cast<uint64_t*>(cached_total_keys_tensor.data<int64_t>());
+      */
     VLOG(3) << "Begin copy grad tensor to boxps struct";
     this->CopyForPush(place, grad_values, total_grad_values_gpu, slot_lengths,
                       hidden_size, total_length, batch_size);
 
     VLOG(3) << "Begin call PushSparseGPU in BoxPS";
     push_boxps_timer.Start();
+    /*
     int ret = boxps_ptr_->PushSparseGPU(
         total_keys, total_grad_values_gpu, static_cast<int>(total_length),
         boost::get<platform::CUDAPlace>(place).GetDeviceId());
     PADDLE_ENFORCE_EQ(ret, 0, platform::errors::PreconditionNotMet(
                                   "PushSparseGPU failed in BoxPS."));
+                                  */
     push_boxps_timer.Pause();
 #else
     PADDLE_THROW(platform::errors::PreconditionNotMet(

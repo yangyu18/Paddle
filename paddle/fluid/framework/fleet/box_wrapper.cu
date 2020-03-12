@@ -47,9 +47,14 @@ __global__ void PullCopy(float** dest, const boxps::FeatureValueGpu* src,
       *(dest[x] + y * hidden + 1) = 0;
       *(dest[x] + y * hidden + 2) = 0;
     } else {
-      *(dest[x] + y * hidden) = (src + i)->show;
-      *(dest[x] + y * hidden + 1) = (src + i)->clk;
-      *(dest[x] + y * hidden + 2) = (src + i)->embed_w;
+      /*
+    *(dest[x] + y * hidden) = (src + i)->show;
+    *(dest[x] + y * hidden + 1) = (src + i)->clk;
+    *(dest[x] + y * hidden + 2) = (src + i)->embed_w;
+    */
+      *(dest[x] + y * hidden) = 2.0;
+      *(dest[x] + y * hidden + 1) = 2.0;
+      *(dest[x] + y * hidden + 2) = 2.0;
     }
     if ((src + i)->embedding_size == 0 || *(keys[x] + y) == 0) {
       for (int j = 0; j < 8; j++) {
@@ -57,7 +62,8 @@ __global__ void PullCopy(float** dest, const boxps::FeatureValueGpu* src,
       }
     } else {
       for (int j = 0; j < 8; j++) {
-        *(dest[x] + y * hidden + 3 + j) = (src + i)->embedx[1 + j];
+        *(dest[x] + y * hidden + 3 + j) = 0.214785;
+        // *(dest[x] + y * hidden + 3 + j) = (src + i)->embedx[1 + j];
       }
     }
   }

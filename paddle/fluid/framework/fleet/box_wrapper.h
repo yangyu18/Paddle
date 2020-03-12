@@ -171,9 +171,9 @@ class BoxWrapper {
       }
       VLOG(2) << "Begin call InitializeGPU in BoxPS";
       // the second parameter is useless
-      s_instance_->boxps_ptr_->InitializeGPU(conf_file, -1, stream_list);
+      // s_instance_->boxps_ptr_->InitializeGPU(conf_file, -1, stream_list);
       p_agent_ = boxps::PSAgentBase::GetIns(feedpass_thread_num_);
-      p_agent_->Init();
+      // p_agent_->Init();
       for (const auto& slot_name : slot_omit_in_feedpass) {
         slot_name_omited_in_feedpass_.insert(slot_name);
       }
@@ -553,7 +553,7 @@ class BoxHelper {
                              int end_index, boxps::PSAgentBase* p_agent,
                              const std::unordered_set<int>& index_map,
                              int thread_id) {
-    p_agent->AddKey(0ul, thread_id);
+    // p_agent->AddKey(0ul, thread_id);
     for (auto iter = t.begin() + begin_index; iter != t.begin() + end_index;
          iter++) {
       const auto& ins = *iter;
@@ -562,7 +562,7 @@ class BoxHelper {
         if (index_map.find(feasign.slot()) != index_map.end()) {
           continue;
         }
-        p_agent->AddKey(feasign.sign().uint64_feasign_, thread_id);
+        // p_agent->AddKey(feasign.sign().uint64_feasign_, thread_id);
       }
     }
   }
@@ -570,12 +570,14 @@ class BoxHelper {
   void FeedPass() {
     VLOG(3) << "Begin FeedPass";
 #ifdef PADDLE_WITH_BOX_PS
+    /*
     struct std::tm b;
     b.tm_year = year_ - 1900;
     b.tm_mon = month_ - 1;
     b.tm_mday = day_;
     b.tm_min = b.tm_hour = b.tm_sec = 0;
     std::time_t x = std::mktime(&b);
+    */
 
     auto box_ptr = BoxWrapper::GetInstance();
     auto input_channel_ =
@@ -600,7 +602,7 @@ class BoxHelper {
     const size_t tnum = box_ptr->GetFeedpassThreadNum();
     boxps::PSAgentBase* p_agent = box_ptr->GetAgent();
     VLOG(3) << "Begin call BeginFeedPass in BoxPS";
-    box_ptr->BeginFeedPass(x / 86400, &p_agent);
+    // box_ptr->BeginFeedPass(x / 86400, &p_agent);
 
     std::vector<std::thread> threads;
     size_t len = pass_data.size();
@@ -618,7 +620,7 @@ class BoxHelper {
       threads[i].join();
     }
     VLOG(3) << "Begin call EndFeedPass in BoxPS";
-    box_ptr->EndFeedPass(p_agent);
+// box_ptr->EndFeedPass(p_agent);
 #endif
   }
 
