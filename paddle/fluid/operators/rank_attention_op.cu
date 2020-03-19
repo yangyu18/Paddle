@@ -32,8 +32,6 @@ class RankAttentionCUDAKernel : public framework::OpKernel<T> {
     auto *X = ctx.Input<Tensor>("X");
     auto *rank_offset = ctx.Input<Tensor>("RankOffset");
     auto *param = ctx.Input<Tensor>("RankParam");
-    auto *input_help = ctx.Output<Tensor>("InputHelp");
-    auto *ins_rank = ctx.Output<Tensor>("InsRank");
     int max_rank = ctx.Attr<int>("MaxRank");
     auto *Out = ctx.Output<Tensor>("Out");
 
@@ -59,37 +57,33 @@ class RankAttentionCUDAKernel : public framework::OpKernel<T> {
 
     auto &dev_ctx = ctx.template device_context<platform::CUDADeviceContext>();
 
-    Tensor param_help;
-    param_help = ctx.AllocateTmpTensor<T, DeviceContext>(
-        {ins_num * block_matrix_row, para_col}, dev_ctx);
-    param_help.mutable_data<T>(ctx.GetPlace());
+    T *param_help_data;
+    cudaMalloc(reinterpret_cast<void **>(&param_help_data),
+               ins_num * block_matrix_row * para_col * sizeof(T));
+    cudaMemset(param_help_data, 0,
+               ins_num * block_matrix_row * para_col * sizeof(T));
 
-    input_help->mutable_data<T>(ctx.GetPlace());
-    ins_rank->mutable_data<T>(ctx.GetPlace());
+    T *input_help_data;
+    cudaMalloc(reinterpret_cast<void **>(&input_help_data),
+               ins_num * block_matrix_row * sizeof(T));
+    cudaMemset(input_help_data, 0, ins_num * block_matrix_row * sizeof(T));
+
+    T *ins_rank_data;
+    cudaMalloc(reinterpret_cast<void **>(&ins_rank_data), ins_num * sizeof(T));
+    cudaMemset(ins_rank_data, -1, ins_num * sizeof(T));
+
     Out->mutable_data<T>(ctx.GetPlace());
 
     // initialize
-    auto param_help_eigen = framework::EigenVector<T>::Flatten(param_help);
-    auto input_help_eigen = framework::EigenVector<T>::Flatten(*input_help);
-    auto ins_rank_eigen = framework::EigenVector<T>::Flatten(*ins_rank);
     auto out_eigen = framework::EigenVector<T>::Flatten(*Out);
 
     auto &place = *ctx.template device_context<platform::CUDADeviceContext>()
                        .eigen_device();
 
-    param_help_eigen.device(place) =
-        param_help_eigen.constant(static_cast<T>(0));
-    input_help_eigen.device(place) =
-        input_help_eigen.constant(static_cast<T>(0));
-    ins_rank_eigen.device(place) = ins_rank_eigen.constant(static_cast<T>(-1));
     out_eigen.device(place) = out_eigen.constant(static_cast<T>(0));
 
     // get data ptr
-    T *input_help_data = input_help->data<T>();
-    T *param_help_data = param_help.data<T>();
-    T *ins_rank_data = ins_rank->data<T>();
     T *out_data = Out->data<T>();
-
     expand_rank_attention_input(
         ctx.cuda_device_context().stream(), X->data<T>(), ins_num, x_fea_dim,
         input_help_data, ins_num, block_matrix_row, rank_offset->data<int>(),
@@ -113,6 +107,10 @@ class RankAttentionCUDAKernel : public framework::OpKernel<T> {
     blas.BatchedGEMM(transA, transB, 1, para_col, block_matrix_row, alpha,
                      input_help_data, param_help_data, beta, out_data, ins_num,
                      strideA, strideB);
+
+    cudaFree(param_help_data);
+    cudaFree(input_help_data);
+    cudaFree(ins_rank_data);
   }
 };
 
@@ -120,15 +118,11 @@ template <typename DeviceContext, typename T>
 class RankAttentionGradOpCUDAKernel : public framework::OpKernel<T> {
  public:
   void Compute(const framework::ExecutionContext &ctx) const override {
-    auto *X = ctx.Input<Tensor>("X");                     // not use data
-    auto *rank_offset = ctx.Input<Tensor>("RankOffset");  // not use data
-    auto *param = ctx.Input<Tensor>("RankParam");         // not use data
-    auto *input_help = ctx.Input<Tensor>("InputHelp");
-    // auto *param_help = ctx.Input<Tensor>("ParamHelp");
-    auto *ins_rank = ctx.Input<Tensor>("InsRank");
+    auto *X = ctx.Input<Tensor>("X");
+    auto *rank_offset = ctx.Input<Tensor>("RankOffset");
+    auto *param = ctx.Input<Tensor>("RankParam");
     auto *dout = ctx.Input<Tensor>(framework::GradVarName("Out"));
 
-    // auto *dX = ctx.Output<Tensor>(framework::GradVarName("X"));
     auto *drank_para = ctx.Output<Tensor>(framework::GradVarName("RankParam"));
 
     // get dim
@@ -147,39 +141,30 @@ class RankAttentionGradOpCUDAKernel : public framework::OpKernel<T> {
 
     // initialize out grad
     drank_para->mutable_data<T>(ctx.GetPlace());
-    // dX->mutable_data<T>(ctx.GetPlace());
     auto drank_para_eigen = framework::EigenVector<T>::Flatten(*drank_para);
-    // auto dX_eigen = framework::EigenVector<T>::Flatten(*dX);
     drank_para_eigen.device(place) =
         drank_para_eigen.constant(static_cast<T>(0));
-    // dX_eigen.device(place) = dX_eigen.constant(static_cast<T>(0));
 
-    // copy data
-    Tensor param_grad;
-    // Tensor input_grad;
-    param_grad = ctx.AllocateTmpTensor<T, DeviceContext>(
-        {ins_num * block_matrix_row, para_col}, dev_ctx);
-    // input_grad = ctx.AllocateTmpTensor<T, DeviceContext>(
-    //    {ins_num, block_matrix_row}, dev_ctx);
+    T *input_help_data;
+    T *ins_rank_data;
+    T *param_grad_data;
 
-    param_grad.mutable_data<T>(ctx.GetPlace());
-    // input_grad.mutable_data<T>(ctx.GetPlace());
+    cudaMalloc(reinterpret_cast<void **>(&input_help_data),
+               ins_num * block_matrix_row * sizeof(T));
+    cudaMalloc(reinterpret_cast<void **>(&ins_rank_data), ins_num * sizeof(T));
+    cudaMalloc(reinterpret_cast<void **>(&param_grad_data),
+               ins_num * block_matrix_row * para_col * sizeof(T));
 
-    // initialize
-    auto param_grad_eigen = framework::EigenVector<T>::Flatten(param_grad);
-    // auto input_grad_eigen = framework::EigenVector<T>::Flatten(input_grad);
+    cudaMemset(input_help_data, 0, ins_num * block_matrix_row * sizeof(T));
+    cudaMemset(ins_rank_data, -1, ins_num * sizeof(T));
+    cudaMemset(param_grad_data, 0,
+               ins_num * block_matrix_row * para_col * sizeof(T));
 
-    param_grad_eigen.device(place) =
-        param_grad_eigen.constant(static_cast<T>(0));
-    // input_grad_eigen.device(place) =
-    //    input_grad_eigen.constant(static_cast<T>(0));
-
-    // get data ptr
-    const T *input_help_data = input_help->data<T>();
-    // const T *param_help_data = param_help->data<T>();
-    const T *ins_rank_data = ins_rank->data<T>();
-    // T *input_grad_data = input_grad.data<T>();
-    T *param_grad_data = param_grad.data<T>();
+    // expand input
+    expand_rank_attention_input(
+        ctx.cuda_device_context().stream(), X->data<T>(), ins_num, x_fea_dim,
+        input_help_data, ins_num, block_matrix_row, rank_offset->data<int>(),
+        rank_offset_dims[0], rank_offset_dims[1], ins_rank_data, max_rank);
 
     auto blas = math::GetBlas<platform::CUDADeviceContext, T>(dev_ctx);
     T alpha = 1;
@@ -201,22 +186,9 @@ class RankAttentionGradOpCUDAKernel : public framework::OpKernel<T> {
         ins_num * block_matrix_row, para_col, drank_para->data<T>(), para_row,
         para_col, ins_rank_data, ins_num, max_rank, x_fea_dim);
 
-    // get input_grad
-    // CBLAS_TRANSPOSE transC = CblasNoTrans;
-    // CBLAS_TRANSPOSE transD = CblasTrans;
-    // int64_t strideC = para_col;
-    // int64_t strideD = block_matrix_row * para_col;
-
-    // blas.BatchedGEMM(transC, transD, 1, block_matrix_row, para_col, alpha,
-    //                 dout->data<T>(), param_help_data, beta, input_grad_data,
-    //                 ins_num, strideC, strideD);
-
-    //// merge input_grad to get dX
-    // merge_rank_attention_input_grad(
-    //    ctx.cuda_device_context().stream(), input_grad_data, ins_num,
-    //    block_matrix_row, dX->data<T>(), ins_num, x_fea_dim,
-    //    rank_offset->data<int>(), rank_offset_dims[0], rank_offset_dims[1],
-    //    ins_rank_data, x_fea_dim);
+    cudaFree(input_help_data);
+    cudaFree(ins_rank_data);
+    cudaFree(param_grad_data);
   }
 };
 
