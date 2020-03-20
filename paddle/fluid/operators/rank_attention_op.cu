@@ -56,30 +56,33 @@ class RankAttentionCUDAKernel : public framework::OpKernel<T> {
     int block_matrix_row = max_rank * x_fea_dim;
 
     auto &dev_ctx = ctx.template device_context<platform::CUDADeviceContext>();
+    auto stream = ctx.cuda_device_context().stream();
+    int device_id = platform::GetCurrentDeviceId();
 
     T *param_help_data;
-    cudaMalloc(reinterpret_cast<void **>(&param_help_data),
-               ins_num * block_matrix_row * para_col * sizeof(T));
-    cudaMemset(param_help_data, 0,
-               ins_num * block_matrix_row * para_col * sizeof(T));
+    auto param_help_size = ins_num * block_matrix_row * para_col * sizeof(T);
+    platform::RecordedCudaMalloc(reinterpret_cast<void **>(&param_help_data),
+                                 param_help_size, device_id);
+    platform::GpuMemsetAsync(param_help_data, 0, param_help_size, stream);
 
     T *input_help_data;
-    cudaMalloc(reinterpret_cast<void **>(&input_help_data),
-               ins_num * block_matrix_row * sizeof(T));
-    cudaMemset(input_help_data, 0, ins_num * block_matrix_row * sizeof(T));
+    auto input_help_size = ins_num * block_matrix_row * sizeof(T);
+    platform::RecordedCudaMalloc(reinterpret_cast<void **>(&input_help_data),
+                                 input_help_size, device_id);
+    platform::GpuMemsetAsync(input_help_data, 0, input_help_size, stream);
 
     T *ins_rank_data;
-    cudaMalloc(reinterpret_cast<void **>(&ins_rank_data), ins_num * sizeof(T));
-    cudaMemset(ins_rank_data, -1, ins_num * sizeof(T));
+    auto ins_rank_size = ins_num * sizeof(T);
+    platform::RecordedCudaMalloc(reinterpret_cast<void **>(&ins_rank_data),
+                                 ins_rank_size, device_id);
+    platform::GpuMemsetAsync(ins_rank_data, -1, ins_rank_size, stream);
 
     Out->mutable_data<T>(ctx.GetPlace());
 
     // initialize
     auto out_eigen = framework::EigenVector<T>::Flatten(*Out);
-
     auto &place = *ctx.template device_context<platform::CUDADeviceContext>()
                        .eigen_device();
-
     out_eigen.device(place) = out_eigen.constant(static_cast<T>(0));
 
     // get data ptr
@@ -108,9 +111,9 @@ class RankAttentionCUDAKernel : public framework::OpKernel<T> {
                      input_help_data, param_help_data, beta, out_data, ins_num,
                      strideA, strideB);
 
-    cudaFree(param_help_data);
-    cudaFree(input_help_data);
-    cudaFree(ins_rank_data);
+    platform::RecordedCudaFree(param_help_data, param_help_size, device_id);
+    platform::RecordedCudaFree(input_help_data, input_help_size, device_id);
+    platform::RecordedCudaFree(ins_rank_data, ins_rank_size, device_id);
   }
 };
 
@@ -145,20 +148,26 @@ class RankAttentionGradOpCUDAKernel : public framework::OpKernel<T> {
     drank_para_eigen.device(place) =
         drank_para_eigen.constant(static_cast<T>(0));
 
-    T *input_help_data;
-    T *ins_rank_data;
+    auto stream = ctx.cuda_device_context().stream();
+    int device_id = platform::GetCurrentDeviceId();
+
     T *param_grad_data;
+    auto param_grad_size = ins_num * block_matrix_row * para_col * sizeof(T);
+    platform::RecordedCudaMalloc(reinterpret_cast<void **>(&param_grad_data),
+                                 param_grad_size, device_id);
+    platform::GpuMemsetAsync(param_grad_data, 0, param_grad_size, stream);
 
-    cudaMalloc(reinterpret_cast<void **>(&input_help_data),
-               ins_num * block_matrix_row * sizeof(T));
-    cudaMalloc(reinterpret_cast<void **>(&ins_rank_data), ins_num * sizeof(T));
-    cudaMalloc(reinterpret_cast<void **>(&param_grad_data),
-               ins_num * block_matrix_row * para_col * sizeof(T));
+    T *input_help_data;
+    auto input_help_size = ins_num * block_matrix_row * sizeof(T);
+    platform::RecordedCudaMalloc(reinterpret_cast<void **>(&input_help_data),
+                                 input_help_size, device_id);
+    platform::GpuMemsetAsync(input_help_data, 0, input_help_size, stream);
 
-    cudaMemset(input_help_data, 0, ins_num * block_matrix_row * sizeof(T));
-    cudaMemset(ins_rank_data, -1, ins_num * sizeof(T));
-    cudaMemset(param_grad_data, 0,
-               ins_num * block_matrix_row * para_col * sizeof(T));
+    T *ins_rank_data;
+    auto ins_rank_size = ins_num * sizeof(T);
+    platform::RecordedCudaMalloc(reinterpret_cast<void **>(&ins_rank_data),
+                                 ins_rank_size, device_id);
+    platform::GpuMemsetAsync(ins_rank_data, -1, ins_rank_size, stream);
 
     // expand input
     expand_rank_attention_input(
@@ -186,9 +195,9 @@ class RankAttentionGradOpCUDAKernel : public framework::OpKernel<T> {
         ins_num * block_matrix_row, para_col, drank_para->data<T>(), para_row,
         para_col, ins_rank_data, ins_num, max_rank, x_fea_dim);
 
-    cudaFree(input_help_data);
-    cudaFree(ins_rank_data);
-    cudaFree(param_grad_data);
+    platform::RecordedCudaFree(param_grad_data, param_grad_size, device_id);
+    platform::RecordedCudaFree(input_help_data, input_help_size, device_id);
+    platform::RecordedCudaFree(ins_rank_data, ins_rank_size, device_id);
   }
 };
 
