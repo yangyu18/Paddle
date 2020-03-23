@@ -364,7 +364,8 @@ class SectionWorker : public DeviceWorker {
   static std::atomic<int> cpu_id_;
 
  protected:
-  void AutoSetCPUAffinity(bool reuse);
+  // void AutoSetCPUAffinity(bool reuse);
+  void AutoSetCPUAffinity(const std::vector<int>& cores);
   int section_id_;
   int pipeline_id_;
   int section_num_;

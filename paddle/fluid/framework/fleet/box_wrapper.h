@@ -158,7 +158,7 @@ class BoxWrapper {
   void InitializeGPU(const char* conf_file, const std::vector<int>& slot_vector,
                      const std::vector<std::string>& slot_omit_in_feedpass) {
     if (nullptr != s_instance_) {
-      VLOG(3) << "Begin InitializeGPU";
+      VLOG(0) << "Begin InitializeGPU";
       std::vector<cudaStream_t*> stream_list;
       for (int i = 0; i < platform::GetCUDADeviceCount(); ++i) {
         VLOG(3) << "before get context i[" << i << "]";
@@ -169,8 +169,59 @@ class BoxWrapper {
         stream_list_[i] = context->stream();
         stream_list.push_back(&stream_list_[i]);
       }
-      VLOG(2) << "Begin call InitializeGPU in BoxPS";
+      VLOG(0) << "Begin call InitializeGPU in BoxPS";
       // the second parameter is useless
+      std::vector<std::pair<std::string, std::vector<int>>> res;
+      res.push_back(std::make_pair(
+          "read_ssd_cpu_cores",
+          std::vector<int>{40,  41,  42,  43,  44,  45,  46,  47,  48,  49,
+                           60,  61,  62,  63,  64,  65,  66,  67,  68,  120,
+                           121, 122, 123, 124, 125, 126, 127, 128, 129, 140,
+                           141, 142, 143, 144, 145, 146, 147, 148}));
+
+      res.push_back(std::make_pair(
+          "build_hbm_cpu_cores",
+          std::vector<int>{0,  1,  2,   3,   20,  21,  22, 23, 80, 81,
+                           82, 83, 100, 101, 102, 103, 4,  5,  6,  7,
+                           8,  9,  10,  11,  12,  13,  14, 15, 16, 17,
+                           18, 19, 24,  25,  26,  27,  28}));
+
+      res.push_back(std::make_pair(
+          "dump_hbm_cpu_cores",
+          std::vector<int>{0,  1,  2,   3,   20,  21,  22, 23, 80, 81,
+                           82, 83, 100, 101, 102, 103, 4,  5,  6,  7,
+                           8,  9,  10,  11,  12,  13,  14, 15, 16, 17,
+                           18, 19, 24,  25,  26,  27,  28}));
+
+      /*
+              res.push_back(std::make_pair(
+                  "save_model_cpu_cores",
+                  std::vector<int>{8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18,
+                                   19, 20, 21, 22, 23, 43, 44, 45, 46, 47, 56,
+                                   57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67,
+                                   68, 69, 70, 71, 91, 92, 93, 94, 95}));
+      */
+      res.push_back(std::make_pair(
+          "sort_unique_cpu_cores",
+          std::vector<int>{119, 105, 113, 135, 104, 115, 107, 157, 116, 112,
+                           108, 154, 98,  151, 118, 106, 149, 94,  158, 110,
+                           155, 92,  139, 90,  117, 89,  134, 132, 96,  93,
+                           111, 95,  136, 152, 137, 153, 114, 138, 150, 91,
+                           99,  109, 131, 130, 156, 97,  133}));
+      res.push_back(std::make_pair(
+          "hbm_insert_cores", std::vector<int>{0, 1, 2, 3, 20, 21, 22, 23}));
+
+      fprintf(stdout, "binding core\n");
+      for (size_t i = 0; i < res.size(); ++i) {
+        const auto& name = res[i].first;
+        const auto& value = res[i].second;
+        fprintf(stdout, "name: %s\nvalue: ", name.c_str());
+        for (size_t j = 0; j < value.size(); ++j) {
+          fprintf(stdout, "%d ", value[j]);
+        }
+        fprintf(stdout, "\n");
+      }
+      s_instance_->boxps_ptr_->BindingCpuCores(res);
       s_instance_->boxps_ptr_->InitializeGPU(conf_file, -1, stream_list);
       p_agent_ = boxps::PSAgentBase::GetIns(feedpass_thread_num_);
       p_agent_->Init();
@@ -572,10 +623,27 @@ class BoxHelper {
 
 #ifdef PADDLE_WITH_BOX_PS
   // notify boxps to feed this pass feasigns from SSD to memory
+  static void AutoSetCPUAffinity(const std::vector<int>& cores) {
+    cpu_set_t mask;
+    CPU_ZERO(&mask);
+    for (size_t i = 0; i < cores.size(); ++i) {
+      CPU_SET(cores[i], &mask);
+    }
+    // if (-1 == sched_setaffinity(0, sizeof(mask), &mask)) {
+    if (0 != pthread_setaffinity_np(pthread_self(), sizeof(mask), &mask)) {
+      LOG(WARNING) << "Fail to set thread affinity to CPU ";
+      return;
+    }
+  }
   static void FeedPassThread(const std::deque<Record>& t, int begin_index,
                              int end_index, boxps::PSAgentBase* p_agent,
                              const std::unordered_set<int>& index_map,
                              int thread_id) {
+    std::vector<int> cores{8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18,
+                           19, 20, 21, 22, 23, 43, 44, 45, 46, 47, 56,
+                           57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67,
+                           68, 69, 70, 71, 91, 92, 93, 94, 95};
+    AutoSetCPUAffinity(cores);
     p_agent->AddKey(0ul, thread_id);
     for (auto iter = t.begin() + begin_index; iter != t.begin() + end_index;
          iter++) {

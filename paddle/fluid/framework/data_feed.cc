@@ -356,6 +356,12 @@ void InMemoryDataFeed<T>::SetParseInsId(bool parse_ins_id) {
 template <typename T>
 void InMemoryDataFeed<T>::LoadIntoMemory() {
 #ifdef _LINUX
+  std::vector<int> cores{89,  90,  91,  92,  93,  94,  95,  96,  97,  98,
+                         99,  104, 105, 106, 107, 108, 109, 110, 111, 112,
+                         113, 114, 115, 116, 117, 118, 119, 130, 131, 132,
+                         133, 134, 135, 136, 137, 138, 139, 149, 150, 151,
+                         152, 153, 154, 155, 156, 157, 158};
+  AutoSetCPUAffinity(cores);
   VLOG(3) << "LoadIntoMemory() begin, thread_id=" << thread_id_;
   std::string filename;
   while (this->PickOneFile(&filename)) {

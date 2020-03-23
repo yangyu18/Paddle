@@ -183,6 +183,18 @@ class DataFeed {
     place_ = place;
   }
   virtual const paddle::platform::Place& GetPlace() const { return place_; }
+  virtual void AutoSetCPUAffinity(const std::vector<int>& cores) {
+    cpu_set_t mask;
+    CPU_ZERO(&mask);
+    for (size_t i = 0; i < cores.size(); ++i) {
+      CPU_SET(cores[i], &mask);
+    }
+    // if (-1 == sched_setaffinity(0, sizeof(mask), &mask)) {
+    if (0 != pthread_setaffinity_np(pthread_self(), sizeof(mask), &mask)) {
+      LOG(WARNING) << "Fail to set thread affinity to CPU ";
+      return;
+    }
+  }
 
  protected:
   // The following three functions are used to check if it is executed in this

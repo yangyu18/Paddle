@@ -105,6 +105,19 @@ void SectionWorker::Initialize(const TrainerDesc& trainer_desc) {
   }
 }
 
+void SectionWorker::AutoSetCPUAffinity(const std::vector<int>& cores) {
+  cpu_set_t mask;
+  CPU_ZERO(&mask);
+  for (size_t i = 0; i < cores.size(); ++i) {
+    CPU_SET(cores[i], &mask);
+  }
+  // if (-1 == sched_setaffinity(0, sizeof(mask), &mask)) {
+  if (0 != pthread_setaffinity_np(pthread_self(), sizeof(mask), &mask)) {
+    LOG(WARNING) << "Fail to set thread affinity to CPU ";
+    return;
+  }
+}
+/*
 void SectionWorker::AutoSetCPUAffinity(bool reuse) {
   int thread_cpu_id = cpu_id_.fetch_add(1);
 
@@ -138,10 +151,12 @@ void SectionWorker::AutoSetCPUAffinity(bool reuse) {
   }
   SEC_LOG << "Set " << thread_cpu_id << "th thread affinity to CPU " << proc;
 }
+*/
 
 void SectionWorker::TrainFiles() {
   SEC_LOG << "begin section_worker TrainFiles";
-  AutoSetCPUAffinity(true);
+  std::vector<int> cores{0, 1, 2, 3, 20, 21, 22, 23};
+  AutoSetCPUAffinity(cores);
 
   int64_t step_cnt = 0;
   int64_t accum_num = 0;
@@ -264,7 +279,7 @@ void SectionWorker::TrainFiles() {
 
 void SectionWorker::TrainFilesWithProfiler() {
   SEC_LOG << "begin section_worker TrainFiles with profiler";
-  AutoSetCPUAffinity(true);
+  // AutoSetCPUAffinity(true);
 
   int64_t step_cnt = 0;
   int64_t accum_num = 0;
