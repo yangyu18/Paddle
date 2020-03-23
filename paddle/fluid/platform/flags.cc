@@ -472,3 +472,6 @@ DEFINE_double(local_exe_sub_scope_limit, 256.0,  // MBytes
               "each CUDAPlace. If you don't need to limit the memory, "
               "you should set FLAGS_local_exe_sub_scope_limit=-1. "
               "The default value is 256 MBytes.");
+
+DEFINE_int32(bind_core, 0,  // Do not bind
+             "Whether bind core in PaddleBox");
