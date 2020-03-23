@@ -14,6 +14,7 @@ limitations under the License. */
 #include "google/protobuf/message.h"
 #include "google/protobuf/text_format.h"
 
+#include "gflags/gflags.h"
 #include "paddle/fluid/framework/device_worker.h"
 #include "paddle/fluid/framework/fleet/box_wrapper.h"
 #include "paddle/fluid/framework/tensor_util.h"
@@ -22,6 +23,7 @@ limitations under the License. */
 #include "paddle/fluid/platform/device_context.h"
 #include "paddle/fluid/platform/lodtensor_printer.h"
 
+DECLARE_int32(bind_core);
 namespace paddle {
 namespace framework {
 
@@ -105,6 +107,19 @@ void SectionWorker::Initialize(const TrainerDesc& trainer_desc) {
   }
 }
 
+void SectionWorker::AutoSetCPUAffinity(const std::vector<int>& cores) {
+  cpu_set_t mask;
+  CPU_ZERO(&mask);
+  for (size_t i = 0; i < cores.size(); ++i) {
+    CPU_SET(cores[i], &mask);
+  }
+  // if (-1 == sched_setaffinity(0, sizeof(mask), &mask)) {
+  if (0 != pthread_setaffinity_np(pthread_self(), sizeof(mask), &mask)) {
+    LOG(WARNING) << "Fail to set thread affinity to CPU ";
+    return;
+  }
+}
+/*
 void SectionWorker::AutoSetCPUAffinity(bool reuse) {
   int thread_cpu_id = cpu_id_.fetch_add(1);
 
@@ -138,10 +153,21 @@ void SectionWorker::AutoSetCPUAffinity(bool reuse) {
   }
   SEC_LOG << "Set " << thread_cpu_id << "th thread affinity to CPU " << proc;
 }
+*/
 
 void SectionWorker::TrainFiles() {
   SEC_LOG << "begin section_worker TrainFiles";
-  AutoSetCPUAffinity(true);
+  if (FLAGS_bind_core == 1) {
+    std::vector<int> cores{0, 1, 2, 3, 20, 21, 22, 23};
+    if (pipeline_id_ == 0) {
+      fprintf(stdout, "train bind core: ");
+      for (size_t i = 0; i < cores.size(); ++i) {
+        fprintf(stdout, "%d ", cores[i]);
+      }
+      fprintf(stdout, "\n");
+    }
+    AutoSetCPUAffinity(cores);
+  }
 
   int64_t step_cnt = 0;
   int64_t accum_num = 0;
@@ -264,7 +290,17 @@ void SectionWorker::TrainFiles() {
 
 void SectionWorker::TrainFilesWithProfiler() {
   SEC_LOG << "begin section_worker TrainFiles with profiler";
-  AutoSetCPUAffinity(true);
+  if (FLAGS_bind_core == 1) {
+    std::vector<int> cores{0, 1, 2, 3, 20, 21, 22, 23};
+    if (pipeline_id_ == 0) {
+      fprintf(stdout, "train bind core: ");
+      for (size_t i = 0; i < cores.size(); ++i) {
+        fprintf(stdout, "%d ", cores[i]);
+      }
+      fprintf(stdout, "\n");
+    }
+    AutoSetCPUAffinity(cores);
+  }
 
   int64_t step_cnt = 0;
   int64_t accum_num = 0;
