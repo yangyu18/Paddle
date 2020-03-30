@@ -290,8 +290,8 @@ class MultiSlotDataset : public DatasetImpl<Record> {
                              std::vector<Record>* result);
   virtual ~MultiSlotDataset() {}
 
-  //  protected:
-  //  paddle::framework::Channel<PVInstance> input_pv_channel_;
+ protected:
+  std::vector<Record> input_records_;  // the real data
 };
 
 }  // end namespace framework

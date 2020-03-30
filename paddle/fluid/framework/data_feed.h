@@ -95,14 +95,19 @@ struct Record {
 };
 
 // FIXME for wasq model -> Pv instance
-struct PvInstance {
-  std::vector<Record> ads;
+struct PvInstanceObject {
+  std::vector<Record*> ads;
   uint64_t search_id_;
-  void merge_instance(const Record& ins) {
-    ads.emplace_back(ins);
-    search_id_ = ins.search_id;
+  void merge_instance(Record* ins) {
+    ads.push_back(ins);
+    search_id_ = ins->search_id;
   }
 };
+
+using PvInstance = PvInstanceObject*;
+
+inline PvInstance make_pv_instance() { return new PvInstanceObject(); }
+
 class DataFeed {
  public:
   DataFeed() {
@@ -609,6 +614,7 @@ class TwoPhaseDataFeed : public MultiSlotInMemoryDataFeed {
   virtual int Next();
   virtual void AssignFeedVar(const Scope& scope);
   virtual void PutToFeedVec(const std::vector<PvInstance>& pv_vec);
+  virtual void PutToFeedVec(const std::vector<Record*>& ins_vec);
   virtual int GetCurrentPhase();
   virtual void GetRankOffset(const std::vector<PvInstance>& pv_vec,
                              int ins_number);

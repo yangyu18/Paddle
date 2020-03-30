@@ -1342,32 +1342,32 @@ void TwoPhaseDataFeed::GetRankOffset(const std::vector<PvInstance>& pv_vec,
   rank_offset_mat.shrink_to_fit();
 
   for (int i = 0; i < pv_num; i++) {
-    auto& pv_ins = pv_vec[i];
+    auto pv_ins = pv_vec[i];
 
-    int ad_num = pv_ins.ads.size();
+    int ad_num = pv_ins->ads.size();
     int index_start = index;
     for (int j = 0; j < ad_num; ++j) {
-      auto& ins = pv_ins.ads[j];
+      auto ins = pv_ins->ads[j];
       int rank = -1;
-      if ((ins.cmatch == 222 || ins.cmatch == 223) &&
-          ins.rank <= static_cast<uint32_t>(max_rank) && ins.rank != 0) {
-        rank = ins.rank;
+      if ((ins->cmatch == 222 || ins->cmatch == 223) &&
+          ins->rank <= static_cast<uint32_t>(max_rank) && ins->rank != 0) {
+        rank = ins->rank;
       }
 
       rank_offset_mat[index * col] = rank;
       if (rank > 0) {
         for (int k = 0; k < ad_num; ++k) {
-          auto& cur_ins = pv_ins.ads[k];
+          auto cur_ins = pv_ins->ads[k];
           int fast_rank = -1;
-          if ((cur_ins.cmatch == 222 || cur_ins.cmatch == 223) &&
-              cur_ins.rank <= static_cast<uint32_t>(max_rank) &&
-              cur_ins.rank != 0) {
-            fast_rank = cur_ins.rank;
+          if ((cur_ins->cmatch == 222 || cur_ins->cmatch == 223) &&
+              cur_ins->rank <= static_cast<uint32_t>(max_rank) &&
+              cur_ins->rank != 0) {
+            fast_rank = cur_ins->rank;
           }
 
           if (fast_rank > 0) {
             int m = fast_rank - 1;
-            rank_offset_mat[index * col + 2 * m + 1] = cur_ins.rank;
+            rank_offset_mat[index * col + 2 * m + 1] = cur_ins->rank;
             rank_offset_mat[index * col + 2 * m + 2] = index_start + k;
           }
         }
@@ -1392,10 +1392,10 @@ void TwoPhaseDataFeed::PutToFeedVec(const std::vector<PvInstance>& pv_vec) {
   // Todo get rank_offset msg
   // int pv_num = pv_vec.size();
   int ins_number = 0;
-  std::vector<Record> ins_vec;
+  std::vector<Record*> ins_vec;
   for (auto& pv : pv_vec) {
-    ins_number += pv.ads.size();
-    for (auto& ins : pv.ads) {
+    ins_number += pv->ads.size();
+    for (auto ins : pv->ads) {
       ins_vec.push_back(ins);
     }
   }
@@ -1403,13 +1403,91 @@ void TwoPhaseDataFeed::PutToFeedVec(const std::vector<PvInstance>& pv_vec) {
   VLOG(3) << "Rank offset is obtained.. ins_number is " << ins_number;
   VLOG(3) << "Current thread id [" << thread_id_ << "] has " << ins_number
           << "instances, has " << pv_vec.size() << " pvs";
-  MultiSlotInMemoryDataFeed::PutToFeedVec(ins_vec);
+  PutToFeedVec(ins_vec);
 }
 
 int TwoPhaseDataFeed::GetCurrentPhase() {
   // FIXME beceuse of two phases in wasq, it must judge form box_wraper
   auto box_ptr = paddle::framework::BoxWrapper::GetInstance();
   return box_ptr->PassFlag();  // join: 1, update: 0
+}
+
+void TwoPhaseDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
+#ifdef _LINUX
+  std::vector<std::vector<float>> batch_float_feasigns(use_slots_.size(),
+                                                       std::vector<float>());
+  std::vector<std::vector<uint64_t>> batch_uint64_feasigns(
+      use_slots_.size(), std::vector<uint64_t>());
+  std::vector<std::vector<size_t>> offset(use_slots_.size(),
+                                          std::vector<size_t>{0});
+  std::vector<bool> visit(use_slots_.size(), false);
+  ins_content_vec_.clear();
+  ins_content_vec_.reserve(ins_vec.size());
+  ins_id_vec_.clear();
+  ins_id_vec_.reserve(ins_vec.size());
+  for (size_t i = 0; i < ins_vec.size(); ++i) {
+    auto r = ins_vec[i];
+    ins_id_vec_.push_back(r->ins_id_);
+    ins_content_vec_.push_back(r->content_);
+    for (auto& item : r->float_feasigns_) {
+      batch_float_feasigns[item.slot()].push_back(item.sign().float_feasign_);
+      visit[item.slot()] = true;
+    }
+    for (auto& item : r->uint64_feasigns_) {
+      batch_uint64_feasigns[item.slot()].push_back(item.sign().uint64_feasign_);
+      visit[item.slot()] = true;
+    }
+    for (size_t j = 0; j < use_slots_.size(); ++j) {
+      const auto& type = all_slots_type_[j];
+      if (visit[j]) {
+        visit[j] = false;
+      } else {
+        // fill slot value with default value 0
+        if (type[0] == 'f') {  // float
+          batch_float_feasigns[j].push_back(0.0);
+        } else if (type[0] == 'u') {  // uint64
+          batch_uint64_feasigns[j].push_back(0);
+        }
+      }
+      // get offset of this ins in this slot
+      if (type[0] == 'f') {  // float
+        offset[j].push_back(batch_float_feasigns[j].size());
+      } else if (type[0] == 'u') {  // uint64
+        offset[j].push_back(batch_uint64_feasigns[j].size());
+      }
+    }
+  }
+
+  for (size_t i = 0; i < use_slots_.size(); ++i) {
+    if (feed_vec_[i] == nullptr) {
+      continue;
+    }
+    int total_instance = offset[i].back();
+    const auto& type = all_slots_type_[i];
+    if (type[0] == 'f') {  // float
+      float* feasign = batch_float_feasigns[i].data();
+      float* tensor_ptr =
+          feed_vec_[i]->mutable_data<float>({total_instance, 1}, this->place_);
+      CopyToFeedTensor(tensor_ptr, feasign, total_instance * sizeof(float));
+    } else if (type[0] == 'u') {  // uint64
+      // no uint64_t type in paddlepaddle
+      uint64_t* feasign = batch_uint64_feasigns[i].data();
+      int64_t* tensor_ptr = feed_vec_[i]->mutable_data<int64_t>(
+          {total_instance, 1}, this->place_);
+      CopyToFeedTensor(tensor_ptr, feasign, total_instance * sizeof(int64_t));
+    }
+    auto& slot_offset = offset[i];
+    LoD data_lod{slot_offset};
+    feed_vec_[i]->set_lod(data_lod);
+    if (use_slots_is_dense_[i]) {
+      if (inductive_shape_index_[i] != -1) {
+        use_slots_shape_[i][inductive_shape_index_[i]] =
+            total_instance / total_dims_without_inductive_[i];
+      }
+      feed_vec_[i]->Resize(framework::make_ddim(use_slots_shape_[i]));
+    }
+  }
+#endif
 }
 
 }  // namespace framework
