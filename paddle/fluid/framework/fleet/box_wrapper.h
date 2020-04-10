@@ -334,6 +334,7 @@ class BoxWrapper {
   void EndFeedPass(boxps::PSAgentBase* agent) const;
   void BeginPass() const;
   void EndPass(bool need_save_delta) const;
+  void SetTestMode(bool is_test) const;
   void PullSparse(const paddle::platform::Place& place,
                   const std::vector<const uint64_t*>& keys,
                   const std::vector<float*>& values,
