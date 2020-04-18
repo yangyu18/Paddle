@@ -1030,24 +1030,12 @@ void MultiSlotInMemoryDataFeed::PutToFeedVec(
     ins_content_vec_.push_back(r.content_);
     for (auto& item : r.float_feasigns_) {
       batch_float_feasigns[item.slot()].push_back(item.sign().float_feasign_);
-      visit[item.slot()] = true;
     }
     for (auto& item : r.uint64_feasigns_) {
       batch_uint64_feasigns[item.slot()].push_back(item.sign().uint64_feasign_);
-      visit[item.slot()] = true;
     }
     for (size_t j = 0; j < use_slots_.size(); ++j) {
       const auto& type = all_slots_type_[j];
-      if (visit[j]) {
-        visit[j] = false;
-      } else {
-        // fill slot value with default value 0
-        if (type[0] == 'f') {  // float
-          batch_float_feasigns[j].push_back(0.0);
-        } else if (type[0] == 'u') {  // uint64
-          batch_uint64_feasigns[j].push_back(0);
-        }
-      }
       // get offset of this ins in this slot
       if (type[0] == 'f') {  // float
         offset[j].push_back(batch_float_feasigns[j].size());
@@ -1461,24 +1449,12 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
     auto r = ins_vec[i];
     for (auto& item : r->float_feasigns_) {
       batch_float_feasigns[item.slot()].push_back(item.sign().float_feasign_);
-      visit[item.slot()] = true;
     }
     for (auto& item : r->uint64_feasigns_) {
       batch_uint64_feasigns[item.slot()].push_back(item.sign().uint64_feasign_);
-      visit[item.slot()] = true;
     }
     for (size_t j = 0; j < use_slots_.size(); ++j) {
       const auto& type = all_slots_type_[j];
-      if (visit[j]) {
-        visit[j] = false;
-      } else {
-        // fill slot value with default value 0
-        if (type[0] == 'f') {  // float
-          batch_float_feasigns[j].push_back(0.0);
-        } else if (type[0] == 'u') {  // uint64
-          batch_uint64_feasigns[j].push_back(0);
-        }
-      }
       // get offset of this ins in this slot
       if (type[0] == 'f') {  // float
         offset[j].push_back(batch_float_feasigns[j].size());
