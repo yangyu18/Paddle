@@ -268,14 +268,19 @@ int InMemoryDataFeed<T>::Next() {
   T instance;
   std::vector<T> ins_vec;
   ins_vec.reserve(this->default_batch_size_);
+  platform::Timer lock_timer;
   while (index < this->default_batch_size_) {
     if (output_channel_->Size() == 0) {
       break;
     }
-    output_channel_->Get(instance);
+    lock_timer.Resume();
+    output_channel_->GetUnlock(instance);
+    lock_timer.Pause();
     ins_vec.push_back(instance);
     ++index;
-    consume_channel_->Put(std::move(instance));
+    lock_timer.Resume();
+    consume_channel_->PutUnlock(std::move(instance));
+    lock_timer.Pause();
   }
   this->batch_size_ = index;
   VLOG(3) << "batch_size_=" << this->batch_size_
@@ -288,6 +293,7 @@ int InMemoryDataFeed<T>::Next() {
             << ", consume_channel_ size=" << consume_channel_->Size()
             << ", thread_id=" << thread_id_;
   }
+  VLOG(0) << "UPDATELOCKTIME:" << lock_timer.ElapsedUS();
   return this->batch_size_;
 #else
   return 0;
@@ -1453,6 +1459,7 @@ int PaddleBoxDataFeed::Next() {
 #ifdef _LINUX
   int phase = GetCurrentPhase();  // join: 1, update: 0
   this->CheckStart();
+  platform::Timer lock_timer;
   if (enable_pv_merge_ && phase == 1) {
     // join phase : output_pv_channel to consume_pv_channel
     CHECK(output_pv_channel_ != nullptr);
@@ -1468,10 +1475,15 @@ int PaddleBoxDataFeed::Next() {
       if (output_pv_channel_->Size() == 0) {
         break;
       }
-      output_pv_channel_->Get(pv_instance);
+
+      lock_timer.Resume();
+      output_pv_channel_->GetUnlock(pv_instance);
+      lock_timer.Pause();
       pv_vec.push_back(pv_instance);
       ++index;
-      consume_pv_channel_->Put(std::move(pv_instance));
+      lock_timer.Resume();
+      consume_pv_channel_->PutUnlock(std::move(pv_instance));
+      lock_timer.Pause();
     }
     this->batch_size_ = index;
     VLOG(3) << "pv_batch_size_=" << this->batch_size_
@@ -1484,11 +1496,11 @@ int PaddleBoxDataFeed::Next() {
               << ", consume_pv_channel_ size=" << consume_pv_channel_->Size()
               << ", thread_id=" << thread_id_;
     }
-    return this->batch_size_;
+    VLOG(0) << "JOINLOCKTIME:" << lock_timer.ElapsedUS();
   } else {
     this->batch_size_ = MultiSlotInMemoryDataFeed::Next();
-    return this->batch_size_;
   }
+  return this->batch_size_;
 #else
   return 0;
 #endif
