@@ -107,6 +107,11 @@ class ChannelObject {
 
   // blocking operation
   bool Get(T& val) { return Read(1, &val) != 0; }  // NOLINT
+  inline bool GetUnlock(T& val) {                  // NOLINT
+    val = std::move(data_.front());
+    data_.pop_front();
+    return true;
+  }
 
   // blocking operation
   // returns 0 if the channel is closed and empty
@@ -123,6 +128,10 @@ class ChannelObject {
 
   // blocking operation
   bool Put(T&& val) { return WriteMove(1, &val) != 0; }
+  bool PutUnlock(T&& val) {
+    data_.push_back(std::move(val));
+    return true;
+  }
 
   // blocking operation
   bool Put(const T& val) { return Write(1, &val) != 0; }
