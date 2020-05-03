@@ -972,9 +972,11 @@ class BoxHelper {
       const auto& ins = *iter;
       const auto& feasign_v = ins.uint64_feasigns_;
       for (const auto feasign : feasign_v) {
+        /*
         if (index_map.find(feasign.slot()) != index_map.end()) {
           continue;
         }
+        */
         p_agent->AddKey(feasign.sign().uint64_feasign_, thread_id);
       }
     }
