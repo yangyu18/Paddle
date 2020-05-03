@@ -266,8 +266,9 @@ int InMemoryDataFeed<T>::Next() {
           << ", thread_id=" << thread_id_;
   int index = 0;
   T instance;
-  std::vector<T> ins_vec;
-  ins_vec.reserve(this->default_batch_size_);
+  // std::vector<T> ins_vec;
+  ins_vec.clear();
+  // ins_vec.reserve(this->default_batch_size_);
   platform::Timer lock_timer;
   while (index < this->default_batch_size_) {
     if (output_channel_->Size() == 0) {
@@ -293,7 +294,7 @@ int InMemoryDataFeed<T>::Next() {
             << ", consume_channel_ size=" << consume_channel_->Size()
             << ", thread_id=" << thread_id_;
   }
-  VLOG(0) << "UPDATELOCKTIME:" << lock_timer.ElapsedUS();
+  // VLOG(0) << "UPDATELOCKTIME:" << lock_timer.ElapsedUS();
   return this->batch_size_;
 #else
   return 0;
@@ -817,6 +818,9 @@ void MultiSlotInMemoryDataFeed::Init(
                        1);  // Each lod info will prepend a zero
   }
   visit_.resize(all_slot_num, false);
+  offset.reserve(all_slot_num * (1 + default_batch_size_));
+  offset_sum.reserve(all_slot_num * (1 + default_batch_size_));
+  ins_vec.reserve(1 + default_batch_size_);
   pipe_command_ = data_feed_desc.pipe_command();
   finish_init_ = true;
 }
@@ -1142,8 +1146,10 @@ void MultiSlotInMemoryDataFeed::PutToFeedVec(
     }
   }
 
-  std::vector<size_t> offset(offset_size, 0);
-  std::vector<size_t> offset_sum(offset_size, 0);
+  offset.clear();
+  offset_sum.clear();
+  offset.resize(offset_size, 0);
+  offset_sum.resize(offset_size, 0);
 
   // construct lod info
   int col = 1;
@@ -1450,6 +1456,7 @@ bool PaddleBoxDataFeed::Start() {
       output_channel_->Write(std::move(data));
     }
   }
+  pv_vec.reserve(default_batch_size_);
 #endif
   this->finish_start_ = true;
   return true;
@@ -1469,8 +1476,9 @@ int PaddleBoxDataFeed::Next() {
             << ", thread_id=" << thread_id_;
     int index = 0;
     PvInstance pv_instance;
-    std::vector<PvInstance> pv_vec;
-    pv_vec.reserve(this->pv_batch_size_);
+    // std::vector<PvInstance> pv_vec;
+    // pv_vec.reserve(this->pv_batch_size_);
+    pv_vec.clear();
     while (index < this->pv_batch_size_) {
       if (output_pv_channel_->Size() == 0) {
         break;
@@ -1496,7 +1504,7 @@ int PaddleBoxDataFeed::Next() {
               << ", consume_pv_channel_ size=" << consume_pv_channel_->Size()
               << ", thread_id=" << thread_id_;
     }
-    VLOG(0) << "JOINLOCKTIME:" << lock_timer.ElapsedUS();
+    // VLOG(0) << "JOINLOCKTIME:" << lock_timer.ElapsedUS();
   } else {
     this->batch_size_ = MultiSlotInMemoryDataFeed::Next();
   }
@@ -1658,8 +1666,12 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
     }
   }
 
-  std::vector<size_t> offset(offset_size, 0);
-  std::vector<size_t> offset_sum(offset_size, 0);
+  // std::vector<size_t> offset(offset_size, 0);
+  // std::vector<size_t> offset_sum(offset_size, 0);
+  offset.clear();
+  offset_sum.clear();
+  offset.resize(offset_size, 0);
+  offset_sum.resize(offset_size, 0);
 
   // construct lod info
   int col = 1;
@@ -1714,7 +1726,7 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
       dest_cpu_p[index_map[i]] = static_cast<void*>(tensor_ptr);
     }
   }
-  fprintf(stderr, "after create tensor\n");
+  // fprintf(stderr, "after create tensor\n");
   auto buf = memory::AllocShared(this->GetPlace(), row_size * sizeof(void*));
   auto type_buf =
       memory::AllocShared(this->GetPlace(), row_size * sizeof(char));

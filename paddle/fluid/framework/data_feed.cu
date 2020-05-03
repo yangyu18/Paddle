@@ -55,7 +55,10 @@ __global__ void CopyForTensorKernel(FeatureItem* src, void** dest,
                    offset[(row_size - 1) * (col_size + 1) + col_id] -
                    offset[row_id * (col_size + 1) + col_id] - (right - left);
     PADDLE_ENFORCE(begin >= 0, "begin must be ge 0.");
-    PADDLE_ENFORCE(begin < total_size, "begin must be lt total_size.");
+    PADDLE_ENFORCE(
+        begin < total_size,
+        "begin must be lt total_size, but your begin[%lu], total_size[%lu]",
+        begin, total_size);
     for (size_t k = left; k < right; ++k) {
       PADDLE_ENFORCE((begin + k - left) >= 0 && (begin + k - left) < total_size,
                      "begin+k-left must be in [0, total_size)");
