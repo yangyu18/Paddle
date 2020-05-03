@@ -334,6 +334,7 @@ class InMemoryDataFeed : public DataFeed {
   paddle::framework::ChannelObject<PvInstance>* input_pv_channel_;
   paddle::framework::ChannelObject<PvInstance>* output_pv_channel_;
   paddle::framework::ChannelObject<PvInstance>* consume_pv_channel_;
+  std::vector<T> ins_vec;
 };
 
 // This class define the data type of instance(ins_vec) in MultiSlotDataFeed
@@ -621,6 +622,8 @@ class MultiSlotInMemoryDataFeed : public InMemoryDataFeed<Record> {
   std::vector<std::vector<uint64_t>> batch_uint64_feasigns_;
   std::vector<std::vector<size_t>> offset_;
   std::vector<bool> visit_;
+  std::vector<size_t> offset;
+  std::vector<size_t> offset_sum;
 };
 
 class PaddleBoxDataFeed : public MultiSlotInMemoryDataFeed {
@@ -640,6 +643,7 @@ class PaddleBoxDataFeed : public MultiSlotInMemoryDataFeed {
                              int ins_number);
   std::string rank_offset_name_;
   int pv_batch_size_;
+  std::vector<PvInstance> pv_vec;
 };
 
 #if defined(PADDLE_WITH_CUDA) && !defined(_WIN32)

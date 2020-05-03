@@ -283,7 +283,12 @@ void DatasetImpl<T>::WaitPreLoadDone() {
 // release memory data
 template <typename T>
 void DatasetImpl<T>::ReleaseMemory() {
-  VLOG(3) << "DatasetImpl<T>::ReleaseMemory() begin";
+  release_thread_ = new std::thread(&DatasetImpl<T>::ReleaseMemoryFun, this);
+  release_thread_->detach();
+}
+template <typename T>
+void DatasetImpl<T>::ReleaseMemoryFun() {
+  VLOG(0) << "DatasetImpl<T>::ReleaseMemory() begin";
   if (input_channel_) {
     input_channel_->Clear();
     input_channel_ = nullptr;
@@ -328,7 +333,7 @@ void DatasetImpl<T>::ReleaseMemory() {
   std::vector<std::shared_ptr<paddle::framework::DataFeed>>().swap(readers_);
   input_records_.clear();
   std::vector<T>().swap(input_records_);
-  VLOG(3) << "DatasetImpl<T>::ReleaseMemory() end";
+  VLOG(0) << "DatasetImpl<T>::ReleaseMemory() end";
 }
 
 // do local shuffle

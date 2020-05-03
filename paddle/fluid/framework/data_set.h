@@ -104,6 +104,8 @@ class Dataset {
   virtual void WaitPreLoadDone() = 0;
   // release all memory data
   virtual void ReleaseMemory() = 0;
+  virtual void ReleaseMemoryFun() = 0;
+
   // local shuffle data
   virtual void LocalShuffle() = 0;
   // global shuffle data
@@ -199,6 +201,7 @@ class DatasetImpl : public Dataset {
   virtual void PreLoadIntoMemory();
   virtual void WaitPreLoadDone();
   virtual void ReleaseMemory();
+  virtual void ReleaseMemoryFun();
   virtual void LocalShuffle();
   virtual void GlobalShuffle(int thread_num = -1);
   virtual void SlotsShuffle(const std::set<std::string>& slots_to_replace) {}
@@ -258,6 +261,7 @@ class DatasetImpl : public Dataset {
   int64_t fleet_send_batch_size_;
   int64_t fleet_send_sleep_seconds_;
   std::vector<std::thread> preload_threads_;
+  std::thread* release_thread_;
   bool merge_by_insid_;
   bool parse_ins_id_;
   bool parse_content_;
