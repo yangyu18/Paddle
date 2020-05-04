@@ -39,6 +39,7 @@ limitations under the License. */
 
 namespace paddle {
 namespace framework {
+using platform::Timer;
 
 void RecordCandidateList::ReSize(size_t length) {
   _mutex.lock();
@@ -258,6 +259,8 @@ bool InMemoryDataFeed<T>::Start() {
 template <typename T>
 int InMemoryDataFeed<T>::Next() {
 #ifdef _LINUX
+  Timer next_timer;
+  next_timer.Resume();
   this->CheckStart();
   CHECK(output_channel_ != nullptr);
   CHECK(consume_channel_ != nullptr);
@@ -274,18 +277,18 @@ int InMemoryDataFeed<T>::Next() {
     if (output_channel_->Size() == 0) {
       break;
     }
-    lock_timer.Resume();
     output_channel_->GetUnlock(instance);
-    lock_timer.Pause();
-    ins_vec.push_back(instance);
-    ++index;
     lock_timer.Resume();
-    consume_channel_->PutUnlock(std::move(instance));
+    ins_vec.push_back(instance);
     lock_timer.Pause();
+    ++index;
+    consume_channel_->PutUnlock(std::move(instance));
   }
   this->batch_size_ = index;
   VLOG(3) << "batch_size_=" << this->batch_size_
           << ", thread_id=" << thread_id_;
+  next_timer.Pause();
+  VLOG(0) << "UPDATE_NEXT:" << next_timer.ElapsedUS();
   if (this->batch_size_ != 0) {
     PutToFeedVec(ins_vec);
   } else {
@@ -294,7 +297,7 @@ int InMemoryDataFeed<T>::Next() {
             << ", consume_channel_ size=" << consume_channel_->Size()
             << ", thread_id=" << thread_id_;
   }
-  // VLOG(0) << "UPDATELOCKTIME:" << lock_timer.ElapsedUS();
+  VLOG(0) << "UPDATEPUSHBACK:" << lock_timer.ElapsedUS();
   return this->batch_size_;
 #else
   return 0;
@@ -1087,6 +1090,8 @@ void MultiSlotInMemoryDataFeed::PutToFeedVec(
     }
   }
 #else
+  Timer timer;
+  timer.Resume();
   paddle::platform::SetDeviceId(
       boost::get<platform::CUDAPlace>(this->GetPlace()).GetDeviceId());
   std::vector<size_t> ins_len(ins_vec.size(), 0);  // prefix sum of ins length
@@ -1232,6 +1237,8 @@ void MultiSlotInMemoryDataFeed::PutToFeedVec(
       feed_vec_[i]->Resize(framework::make_ddim(use_slots_shape_[i]));
     }
   }
+  timer.Pause();
+  VLOG(0) << "UPDATE_PUT:" << timer.ElapsedUS();
 #endif
 #endif
 }
@@ -1464,6 +1471,8 @@ bool PaddleBoxDataFeed::Start() {
 
 int PaddleBoxDataFeed::Next() {
 #ifdef _LINUX
+  Timer next_timer;
+  next_timer.Resume();
   int phase = GetCurrentPhase();  // join: 1, update: 0
   this->CheckStart();
   platform::Timer lock_timer;
@@ -1484,18 +1493,18 @@ int PaddleBoxDataFeed::Next() {
         break;
       }
 
-      lock_timer.Resume();
       output_pv_channel_->GetUnlock(pv_instance);
-      lock_timer.Pause();
-      pv_vec.push_back(pv_instance);
-      ++index;
       lock_timer.Resume();
-      consume_pv_channel_->PutUnlock(std::move(pv_instance));
+      pv_vec.push_back(pv_instance);
       lock_timer.Pause();
+      ++index;
+      consume_pv_channel_->PutUnlock(std::move(pv_instance));
     }
     this->batch_size_ = index;
     VLOG(3) << "pv_batch_size_=" << this->batch_size_
             << ", thread_id=" << thread_id_;
+    next_timer.Pause();
+    VLOG(0) << "JOIN_NEXT:" << next_timer.ElapsedUS();
     if (this->batch_size_ != 0) {
       PutToFeedVec(pv_vec);
     } else {
@@ -1504,7 +1513,7 @@ int PaddleBoxDataFeed::Next() {
               << ", consume_pv_channel_ size=" << consume_pv_channel_->Size()
               << ", thread_id=" << thread_id_;
     }
-    // VLOG(0) << "JOINLOCKTIME:" << lock_timer.ElapsedUS();
+    VLOG(0) << "JOINPUSHBACK:" << lock_timer.ElapsedUS();
   } else {
     this->batch_size_ = MultiSlotInMemoryDataFeed::Next();
   }
@@ -1581,6 +1590,8 @@ void PaddleBoxDataFeed::AssignFeedVar(const Scope& scope) {
 
 void PaddleBoxDataFeed::PutToFeedVec(const std::vector<PvInstance>& pv_vec) {
 #ifdef _LINUX
+  Timer timer;
+  timer.Resume();
   int ins_number = 0;
   std::vector<Record*> ins_vec;
   for (auto& pv : pv_vec) {
@@ -1590,7 +1601,10 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<PvInstance>& pv_vec) {
     }
   }
   GetRankOffset(pv_vec, ins_number);
+  timer.Pause();
+  VLOG(0) << "JOIN_RANK:" << timer.ElapsedUS();
   PutToFeedVec(ins_vec);
+
 #endif
 }
 
@@ -1606,6 +1620,8 @@ int PaddleBoxDataFeed::GetCurrentPhase() {
 
 void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
 #if defined(PADDLE_WITH_CUDA) && defined(_LINUX)
+  Timer timer;
+  timer.Resume();
 
   paddle::platform::SetDeviceId(
       boost::get<platform::CUDAPlace>(this->GetPlace()).GetDeviceId());
@@ -1755,6 +1771,8 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
       feed_vec_[i]->Resize(framework::make_ddim(use_slots_shape_[i]));
     }
   }
+  timer.Pause();
+  VLOG(0) << "JOIN_PUT:" << timer.ElapsedUS();
 #endif
 }
 
