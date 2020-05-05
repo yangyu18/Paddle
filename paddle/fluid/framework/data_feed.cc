@@ -1712,6 +1712,11 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
   Timer timer;
   timer.Resume();
 
+  Timer t1;
+  Timer t2;
+  Timer t3;
+  Timer t4;
+  t1.Resume();
   paddle::platform::SetDeviceId(
       boost::get<platform::CUDAPlace>(this->GetPlace()).GetDeviceId());
   std::vector<size_t> ins_len(ins_vec.size(), 0);  // prefix sum of ins length
@@ -1729,7 +1734,14 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
       memory::AllocShared(this->GetPlace(), total_size * sizeof(FeatureItem));
   FeatureItem* fea_list_cpu = reinterpret_cast<FeatureItem*>(cpu_buf->ptr());
   FeatureItem* fea_list_gpu = reinterpret_cast<FeatureItem*>(gpu_buf->ptr());
+  t1.Pause();
 
+  Timer t21;
+  Timer t22;
+  Timer t23;
+  Timer t24;
+  t2.Resume();
+  t21.Resume();
   size_t size_off = 0;
   for (size_t i = 0; i < ins_vec.size(); ++i) {
     auto& r = ins_vec[i];
@@ -1740,6 +1752,8 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
            sizeof(FeatureItem) * r->float_feasigns_.size());
     size_off += r->float_feasigns_.size();
   }
+  t21.Pause();
+  t22.Resume();
 
   size_t row_size = use_slots_.size();       // slot_number
   size_t col_size = 1 + ins_vec.size();      // 1 + batch_size
@@ -1760,7 +1774,6 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
   for (size_t i = uslot_num; i < row_size; ++i) {
     slot_type[i] = 'f';
   }
-
   int u_slot_id = 0;
   for (size_t i = 0; i < use_slots_.size(); ++i) {
     const auto& type = all_slots_type_[i];
@@ -1771,6 +1784,8 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
     }
   }
 
+  t22.Pause();
+  t23.Resume();
   // std::vector<size_t> offset(offset_size, 0);
   // std::vector<size_t> offset_sum(offset_size, 0);
   offset.clear();
@@ -1786,7 +1801,8 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
     }
     offset[index_map[fea_list_cpu[i].slot()] * col_size + col]++;
   }
-
+  t23.Pause();
+  t24.Resume();
   // compute sum-lod info, for using kernel to make batch
   for (size_t i = 0; i < offset.size(); ++i) {
     int row = i / col_size;
@@ -1802,7 +1818,9 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
       offset[i] += offset[i - 1];
     }
   }
-
+  t24.Pause();
+  t2.Pause();
+  t3.Resume();
   Tensor offset_gpu;
   size_t* offset_gpu_data =
       reinterpret_cast<size_t*>(offset_gpu.mutable_data<int64_t>(
@@ -1842,6 +1860,8 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
   cudaMemcpy(type_gpu_p, slot_type.data(), row_size * sizeof(char),
              cudaMemcpyHostToDevice);
 
+  t3.Pause();
+  t4.Resume();
   CopyForTensor(this->GetPlace(), fea_list_gpu, dest_gpu_p, offset_gpu_data,
                 type_gpu_p, total_size, row_size, col_size);
 
@@ -1860,8 +1880,14 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
       feed_vec_[i]->Resize(framework::make_ddim(use_slots_shape_[i]));
     }
   }
+  t4.Pause();
   timer.Pause();
   VLOG(0) << "JOIN_PUT:" << timer.ElapsedUS();
+  VLOG(0) << "JOIN_PUT_PROFILE:" << t1.ElapsedUS() << ":" << t2.ElapsedUS()
+          << ":" << t3.ElapsedUS() << ":" << t4.ElapsedUS();
+  VLOG(0) << "JOIN_PUT_PROFILE_FINE:" << t21.ElapsedUS() << ":"
+          << t22.ElapsedUS() << ":" << t23.ElapsedUS() << ":"
+          << t24.ElapsedUS();
 #endif
 }
 
