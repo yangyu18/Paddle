@@ -238,6 +238,7 @@ class DatasetImpl : public Dataset {
   std::vector<std::shared_ptr<paddle::framework::DataFeed>> readers_;
   std::vector<std::shared_ptr<paddle::framework::DataFeed>> preload_readers_;
   paddle::framework::Channel<T> input_channel_;
+  paddle::framework::Channel<T*> input_ptr_channel_;
   paddle::framework::Channel<PvInstance> input_pv_channel_;
   std::vector<paddle::framework::Channel<PvInstance>> multi_pv_output_;
   std::vector<paddle::framework::Channel<PvInstance>> multi_pv_consume_;
@@ -245,6 +246,8 @@ class DatasetImpl : public Dataset {
   int channel_num_;
   std::vector<paddle::framework::Channel<T>> multi_output_channel_;
   std::vector<paddle::framework::Channel<T>> multi_consume_channel_;
+  std::vector<paddle::framework::Channel<T*>> output_ptr_channel_;
+  std::vector<paddle::framework::Channel<T*>> consume_ptr_channel_;
   std::vector<std::unordered_set<uint64_t>> local_tables_;
   // when read ins, we put ins from one channel to the other,
   // and when finish reading, we set cur_channel = 1 - cur_channel,
