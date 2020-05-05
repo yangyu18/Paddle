@@ -269,9 +269,9 @@ int InMemoryDataFeed<T>::Next() {
           << ", thread_id=" << thread_id_;
   int index = 0;
   T instance;
-  // std::vector<T> ins_vec;
-  ins_vec.clear();
-  // ins_vec.reserve(this->default_batch_size_);
+  std::vector<T> ins_vec;
+  // ins_vec.clear();
+  ins_vec.reserve(this->default_batch_size_);
   platform::Timer lock_timer;
   while (index < this->default_batch_size_) {
     if (output_channel_->Size() == 0) {
@@ -310,6 +310,12 @@ void InMemoryDataFeed<T>::SetInputChannel(void* channel) {
 }
 
 template <typename T>
+void InMemoryDataFeed<T>::SetInputPtrChannel(void* channel) {
+  input_ptr_channel_ =
+      static_cast<paddle::framework::ChannelObject<T*>*>(channel);
+}
+
+template <typename T>
 void InMemoryDataFeed<T>::SetOutputChannel(void* channel) {
   output_channel_ = static_cast<paddle::framework::ChannelObject<T>*>(channel);
 }
@@ -317,6 +323,18 @@ void InMemoryDataFeed<T>::SetOutputChannel(void* channel) {
 template <typename T>
 void InMemoryDataFeed<T>::SetConsumeChannel(void* channel) {
   consume_channel_ = static_cast<paddle::framework::ChannelObject<T>*>(channel);
+}
+
+template <typename T>
+void InMemoryDataFeed<T>::SetOutputPtrChannel(void* channel) {
+  output_ptr_channel_ =
+      static_cast<paddle::framework::ChannelObject<T*>*>(channel);
+}
+
+template <typename T>
+void InMemoryDataFeed<T>::SetConsumePtrChannel(void* channel) {
+  consume_ptr_channel_ =
+      static_cast<paddle::framework::ChannelObject<T*>*>(channel);
 }
 
 template <typename T>
@@ -1446,6 +1464,7 @@ bool MultiSlotFileInstantDataFeed::ParseOneMiniBatch() {
 
 bool PaddleBoxDataFeed::Start() {
 #ifdef _LINUX
+  VLOG(0) << "Begin Start";
   int phase = GetCurrentPhase();  // join: 1, update: 0
   this->CheckSetFileList();
   if (enable_pv_merge_ && phase == 1) {
@@ -1461,6 +1480,12 @@ bool PaddleBoxDataFeed::Start() {
       std::vector<Record> data;
       input_channel_->Read(data);
       output_channel_->Write(std::move(data));
+    }
+    if (output_ptr_channel_->Size() == 0 && input_ptr_channel_->Size() != 0) {
+      std::vector<Record*> data;
+      input_ptr_channel_->Read(data);
+      output_ptr_channel_->Write(std::move(data));
+      VLOG(0) << "output_ptr_channel size: " << output_ptr_channel_->Size();
     }
   }
   pv_vec.reserve(default_batch_size_);
@@ -1515,7 +1540,46 @@ int PaddleBoxDataFeed::Next() {
     }
     VLOG(0) << "JOINPUSHBACK:" << lock_timer.ElapsedUS();
   } else {
-    this->batch_size_ = MultiSlotInMemoryDataFeed::Next();
+    Timer next_timer;
+    next_timer.Resume();
+    this->CheckStart();
+    CHECK(output_channel_ != nullptr);
+    CHECK(consume_channel_ != nullptr);
+    VLOG(3) << "output_channel_ size=" << output_channel_->Size()
+            << ", consume_channel_ size=" << consume_channel_->Size()
+            << ", thread_id=" << thread_id_;
+    int index = 0;
+    Record* instance;
+    // std::vector<T> ins_vec;
+    ins_vec.clear();
+    // ins_vec.reserve(this->default_batch_size_);
+    platform::Timer lock_timer;
+    while (index < this->default_batch_size_) {
+      if (output_ptr_channel_->Size() == 0) {
+        break;
+      }
+      output_ptr_channel_->GetUnlock(instance);
+      lock_timer.Resume();
+      ins_vec.push_back(instance);
+      lock_timer.Pause();
+      ++index;
+      consume_ptr_channel_->PutUnlock(std::move(instance));
+    }
+    this->batch_size_ = index;
+    VLOG(3) << "batch_size_=" << this->batch_size_
+            << ", thread_id=" << thread_id_;
+    next_timer.Pause();
+    VLOG(0) << "UPDATE_NEXT:" << next_timer.ElapsedUS();
+    if (this->batch_size_ != 0) {
+      PutToFeedVec(ins_vec);
+    } else {
+      VLOG(3) << "finish reading, output_channel_ size="
+              << output_channel_->Size()
+              << ", consume_channel_ size=" << consume_channel_->Size()
+              << ", thread_id=" << thread_id_;
+    }
+    VLOG(0) << "UPDATEPUSHBACK:" << lock_timer.ElapsedUS();
+    return this->batch_size_;
   }
   return this->batch_size_;
 #else

@@ -158,10 +158,13 @@ class DataFeed {
 
   // This function will do nothing at default
   virtual void SetInputChannel(void* channel) {}
+  virtual void SetInputPtrChannel(void* channel) {}
   // This function will do nothing at default
   virtual void SetOutputChannel(void* channel) {}
+  virtual void SetOutputPtrChannel(void* channel) {}
   // This function will do nothing at default
   virtual void SetConsumeChannel(void* channel) {}
+  virtual void SetConsumePtrChannel(void* channel) {}
   // This function will do nothing at default
   virtual void SetThreadId(int thread_id) {}
   // This function will do nothing at default
@@ -301,6 +304,9 @@ class InMemoryDataFeed : public DataFeed {
   virtual void SetInputChannel(void* channel);
   virtual void SetOutputChannel(void* channel);
   virtual void SetConsumeChannel(void* channel);
+  virtual void SetInputPtrChannel(void* channel);
+  virtual void SetOutputPtrChannel(void* channel);
+  virtual void SetConsumePtrChannel(void* channel);
   virtual void SetThreadId(int thread_id);
   virtual void SetThreadNum(int thread_num);
   virtual void SetParseInsId(bool parse_ins_id);
@@ -328,10 +334,14 @@ class InMemoryDataFeed : public DataFeed {
   paddle::framework::ChannelObject<T>* output_channel_;
   paddle::framework::ChannelObject<T>* consume_channel_;
 
+  paddle::framework::ChannelObject<T*>* input_ptr_channel_;
+  paddle::framework::ChannelObject<T*>* output_ptr_channel_;
+  paddle::framework::ChannelObject<T*>* consume_ptr_channel_;
+
   paddle::framework::ChannelObject<PvInstance>* input_pv_channel_;
   paddle::framework::ChannelObject<PvInstance>* output_pv_channel_;
   paddle::framework::ChannelObject<PvInstance>* consume_pv_channel_;
-  std::vector<T> ins_vec;
+  std::vector<T*> ins_vec;
 };
 
 // This class define the data type of instance(ins_vec) in MultiSlotDataFeed
