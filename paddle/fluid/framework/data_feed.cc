@@ -288,7 +288,7 @@ int InMemoryDataFeed<T>::Next() {
   VLOG(3) << "batch_size_=" << this->batch_size_
           << ", thread_id=" << thread_id_;
   next_timer.Pause();
-  VLOG(0) << "UPDATE_NEXT:" << next_timer.ElapsedUS();
+  // VLOG(0) << "UPDATE_NEXT:" << next_timer.ElapsedUS();
   if (this->batch_size_ != 0) {
     PutToFeedVec(ins_vec);
   } else {
@@ -297,7 +297,7 @@ int InMemoryDataFeed<T>::Next() {
             << ", consume_channel_ size=" << consume_channel_->Size()
             << ", thread_id=" << thread_id_;
   }
-  VLOG(0) << "UPDATEPUSHBACK:" << lock_timer.ElapsedUS();
+  // VLOG(0) << "UPDATEPUSHBACK:" << lock_timer.ElapsedUS();
   return this->batch_size_;
 #else
   return 0;
@@ -1277,7 +1277,7 @@ void MultiSlotInMemoryDataFeed::PutToFeedVec(
     }
   }
   timer.Pause();
-  VLOG(0) << "UPDATE_PUT:" << timer.ElapsedUS();
+// VLOG(0) << "UPDATE_PUT:" << timer.ElapsedUS();
 #endif
 #endif
 }
@@ -1550,7 +1550,7 @@ int PaddleBoxDataFeed::Next() {
     VLOG(3) << "pv_batch_size_=" << this->batch_size_
             << ", thread_id=" << thread_id_;
     next_timer.Pause();
-    VLOG(0) << "JOIN_NEXT:" << next_timer.ElapsedUS();
+    // VLOG(0) << "JOIN_NEXT:" << next_timer.ElapsedUS();
     if (this->batch_size_ != 0) {
       PutToFeedVec(pv_vec);
     } else {
@@ -1559,7 +1559,7 @@ int PaddleBoxDataFeed::Next() {
               << ", consume_pv_channel_ size=" << consume_pv_channel_->Size()
               << ", thread_id=" << thread_id_;
     }
-    VLOG(0) << "JOINPUSHBACK:" << lock_timer.ElapsedUS();
+    // VLOG(0) << "JOINPUSHBACK:" << lock_timer.ElapsedUS();
   } else {
     Timer next_timer;
     next_timer.Resume();
@@ -1590,7 +1590,7 @@ int PaddleBoxDataFeed::Next() {
     VLOG(3) << "batch_size_=" << this->batch_size_
             << ", thread_id=" << thread_id_;
     next_timer.Pause();
-    VLOG(0) << "UPDATE_NEXT:" << next_timer.ElapsedUS();
+    // VLOG(0) << "UPDATE_NEXT:" << next_timer.ElapsedUS();
     if (this->batch_size_ != 0) {
       PutToFeedVec(ins_vec);
     } else {
@@ -1599,7 +1599,7 @@ int PaddleBoxDataFeed::Next() {
               << ", consume_channel_ size=" << consume_channel_->Size()
               << ", thread_id=" << thread_id_;
     }
-    VLOG(0) << "UPDATEPUSHBACK:" << lock_timer.ElapsedUS();
+    // VLOG(0) << "UPDATEPUSHBACK:" << lock_timer.ElapsedUS();
     return this->batch_size_;
   }
   return this->batch_size_;
@@ -1687,7 +1687,7 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<PvInstance>& pv_vec) {
   }
   GetRankOffset(pv_vec, ins_number);
   timer.Pause();
-  VLOG(0) << "JOIN_RANK:" << timer.ElapsedUS();
+  // VLOG(0) << "JOIN_RANK:" << timer.ElapsedUS();
   PutToFeedVec(ins_vec);
 
 #endif
@@ -1882,12 +1882,14 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
   }
   t4.Pause();
   timer.Pause();
+/*
   VLOG(0) << "JOIN_PUT:" << timer.ElapsedUS();
   VLOG(0) << "JOIN_PUT_PROFILE:" << t1.ElapsedUS() << ":" << t2.ElapsedUS()
           << ":" << t3.ElapsedUS() << ":" << t4.ElapsedUS();
   VLOG(0) << "JOIN_PUT_PROFILE_FINE:" << t21.ElapsedUS() << ":"
           << t22.ElapsedUS() << ":" << t23.ElapsedUS() << ":"
           << t24.ElapsedUS();
+*/
 #endif
 }
 
