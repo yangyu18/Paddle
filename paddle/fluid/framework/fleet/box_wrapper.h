@@ -190,14 +190,15 @@ class AfsManager {
     PADDLE_ENFORCE_GE(ret, 0, platform::errors::PreconditionNotMet(
                                   "Called AFSAPI Open Failed."));
 
-    char* _buff = static_cast<char*>(calloc(BUF_SIZE + 2, sizeof(char)));
+    // char* _buff = static_cast<char*>(calloc(BUF_SIZE + 2, sizeof(char)));
+    char _buff[BUF_SIZE];
     int size = 0;
     while ((size = read_stream->Read(_buff, BUF_SIZE)) > 0) {
       fwrite(_buff, 1, size, wfp);
     }
     fflush(wfp);
     fclose(wfp);
-    delete _buff;
+    // delete _buff;
     delete read_stream;
   }
   int PopenBidirectionalInternal(const char* command,
