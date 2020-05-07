@@ -918,6 +918,8 @@ bool MultiSlotInMemoryDataFeed::ParseOneInstanceFromPipe(Record* instance) {
       instance->rank = rank;
       pos += len + 1;
     }
+    instance->uint64_feasigns_.reserve(1000);
+    instance->float_feasigns_.reserve(41);
     for (size_t i = 0; i < use_slots_index_.size(); ++i) {
       int idx = use_slots_index_[i];
       int num = strtol(&str[pos], &endptr, 10);
