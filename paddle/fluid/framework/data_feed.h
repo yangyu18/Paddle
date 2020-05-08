@@ -617,6 +617,9 @@ class MultiSlotInMemoryDataFeed : public InMemoryDataFeed<Record> {
                              FeatureItem* src, void** dest, size_t* offset,
                              char* type, size_t total_size, size_t row_size,
                              size_t col_size);
+  virtual void FuseCopyForTensor(
+    const paddle::platform::Place& place, FeatureItem* src, float** dest,
+    size_t* offset, size_t total_size, size_t bs);
 #endif
 
  protected:
@@ -645,6 +648,7 @@ class PaddleBoxDataFeed : public MultiSlotInMemoryDataFeed {
   virtual void AssignFeedVar(const Scope& scope);
   virtual void PutToFeedVec(const std::vector<PvInstance>& pv_vec);
   virtual void PutToFeedVec(const std::vector<Record*>& ins_vec);
+  virtual void FusePutToFeedVec(const std::vector<Record*>& ins_vec);
   virtual int GetCurrentPhase();
   virtual void GetRankOffset(const std::vector<PvInstance>& pv_vec,
                              int ins_number);

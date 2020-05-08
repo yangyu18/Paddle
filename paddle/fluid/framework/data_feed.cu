@@ -18,9 +18,11 @@ limitations under the License. */
 #endif
 
 #include "paddle/fluid/framework/data_feed.h"
+#include "paddle/fluid/framework/fleet/box_wrapper.h"
 
 namespace paddle {
 namespace framework {
+using platform::PADDLE_CUDA_NUM_THREADS;
 
 #define CUDA_KERNEL_LOOP(i, n)                                 \
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < (n); \
@@ -82,6 +84,60 @@ void MultiSlotInMemoryDataFeed::CopyForTensor(
   CopyForTensorKernel<<<((row_size * (col_size - 1)) + 511) / 512, 512, 0,
                         stream>>>(src, dest, offset, type, total_size, row_size,
                                   col_size - 1);
+  cudaStreamSynchronize(stream);
+}
+
+__global__ void ExtractFeasign(uint64_t* dest, FeatureItem* src, size_t total_size) {
+  CUDA_KERNEL_LOOP(i, total_size) {
+    dest[i] = src[i].sign().uint64_feasign_;
+  }
+}
+
+__global__ void SequencePoolKernel(float **dest, FeatureItem *src, float *emb, size_t *offset, int bs, int hidden_size) {
+  CUDA_KERNEL_LOOP(i, total_size) {
+    int low = 0;
+    int high = bs - 1;
+    while (low < high) {
+      int mid = (low + high) / 2;
+      if (i < len[mid])
+        high = mid;
+      else
+        low = mid + 1;
+    }
+    int ins_id = low;
+    uint16_t slot_id = src[i].slot();
+    for (int j = 0; j < hidden_size; ++j) {
+      paddle::platform::CudaAtomicAdd(dest[slot_id] + ins_id * hidden_size + j, emb[i * hidden_size + j]);
+    }
+  }
+}
+
+void MultiSlotInMemoryDataFeed::FuseCopyForTensor(
+    const paddle::platform::Place& place, FeatureItem* src, float** dest,
+    size_t* offset, size_t total_size, size_t bs) {
+  auto stream = dynamic_cast<platform::CUDADeviceContext*>(platform::DeviceContextPool::Instance().Get(
+                        boost::get<platform::CUDAPlace>(place)))
+                    ->stream();
+                    
+  auto key_gpu_buf = memory::AllocShared(this->GetPlace(), total_size * sizeof(uint64_t));
+  auto emb_gpu_buf = memory::AllocShared(this->GetPlace(), 11 * total_size * sizeof(float));
+
+  uint64_t* key_gpu_data = reinterpret_cast<uint64_t>(key_gpu_buf->ptr());
+  float* emb_gpu_data = reinterpret_cast<float>(emb_gpu_buf->ptr());
+  
+  ExtractFeasign<<<(total_size + PADDLE_CUDA_NUM_THREADS - 1) / PADDLE_CUDA_NUM_THREADS, PADDLE_CUDA_NUM_THREADS, 0 ,stream>>>(key_gpu_data, src, total_size);
+  cudaStreamSynchronize(stream);
+
+  // call PushSparse
+
+  auto box_ptr = paddle::framework::BoxWrapper::GetInstance();
+  std::vector<const uint64_t*> all_keys(1, key_gpu_data);
+  std::vector<float *> all_values(1, emb_gpu_data);
+  std::vector<int64_t> slot_lengths(1, total_size);
+  box_ptr->PullSparse(place, all_keys, all_values, slot_lengths, 11);
+
+  // SequencePool
+  SequencePoolKernel<<<(total_size + PADDLE_CUDA_NUM_THREADS - 1) / PADDLE_CUDA_NUM_THREADS, PADDLE_CUDA_NUM_THREADS, 0 ,stream>>>(dest, emb_gpu_data, offset, bs, 11);
   cudaStreamSynchronize(stream);
 }
 

@@ -1684,6 +1684,92 @@ int PaddleBoxDataFeed::GetCurrentPhase() {
 #endif
 }
 
+void PaddleBoxDataFeed::FusePutToFeedVec(const std::vector<Record*>& ins_vec) {
+  paddle::platform::SetDeviceId(boost::get<platform::CUDAPlace>(this->GetPlace()).GetDeviceId());
+
+  std::vector<size_t> ins_len(ins_vec.size(), 0);  // prefix sum of ins length
+  size_t total_size = 0;
+  for (size_t i = 0; i < ins_vec.size(); ++i) {
+    auto& r = ins_vec[i];
+    total_size += r->uint64_feasigns_.size() - 1; // remove the first feasigh: click
+    ins_len[i] = total_size;
+  }
+
+  // fprintf(stderr, "totol size: %lu\n", total_size);
+  auto cpu_buf = memory::AllocShared(platform::CPUPlace(), total_size * sizeof(FeatureItem));
+  auto gpu_buf = memory::AllocShared(this->GetPlace(), total_size * sizeof(int64_t));
+  auto gpu_offset =  memory::AllocShared(this->GetPlace(), ins_vec.size() * sizeof(size_t));
+  
+  FeatureItem* fea_list_cpu = reinterpret_cast<FeatureItem*>(cpu_buf->ptr());
+  FeatureItem* fea_list_gpu = reinterpret_cast<FeatureItem*>(gpu_buf->ptr());
+  size_t *gpu_offset_data = reinterpret_cast<size_t>(gpu_offset->ptr());
+
+  // TODO: Should test which method is better
+  size_t size_off = 0;
+  for (size_t i = 0; i < ins_vec.size(); ++i) {
+    auto& r = ins_vec[i];
+    memcpy(fea_list_cpu + size_off, r->uint64_feasigns_.data() + 1, sizeof(FeatureItem) * (r->uint64_feasigns_.size() - 1));
+    size_off += r->uint64_feasigns_.size() - 1;
+  }
+
+  size_t row_size = use_slots_.size();       // slot_number
+  size_t col_size = ins_vec.size();      // batch_size
+  // printf("row_size: %d, col_size: %d\n", (int)row_size, (int)col_size);
+
+  cudaMemcpy(fea_list_gpu, fea_list_cpu, total_size * sizeof(FeatureItem), cudaMemcpyHostToDevice);
+  cudaMemcpy(gpu_offset_data, ins_len.data(), col_size * sizeof(size_t), cudaMemcpyHostToDevice);
+
+  std::vector<uint64_t*> dest_cpu_p(row_size, nullptr);
+
+  for (size_t i = 0; i < use_slots_.size(); ++i) {
+    if (feed_vec_[i] == nullptr) {
+      continue;
+    }
+    int total_instance = (int)col_size;
+    if (i == 0) { // click
+      uint64_t* tensor_ptr = reinterpret_cast<uint64_t*>(feed_vec_[i]->mutable_data<int64_t>({total_instance, 1}, this->place_));
+      std::vector<uint64_t> click(total_instance, 0);
+      for (size_t i = 0; i < ins_vec.size(); ++i) {
+        auto& r = ins_vec[i];
+        click[i] = r->uint64_feasigns_[0].sign().uint64_feasigns_;
+      }
+      cudaMemcpy(tensor_ptr, click.data(), total_instance * sizeof(uint64_t), cudaMemcpyHostToDevice);
+      continue;
+    }
+    const auto& type = all_slots_type_[i];
+    if (type[0] == 'f') {  // float for position input
+      float* tensor_ptr = feed_vec_[i]->mutable_data<float>({total_instance, 24}, this->place_);
+      std::vector<float> float_cpu(total_instance * 24, 0.0);
+      for (size_t i = 0; i < ins_vec.size(); ++i) {
+        auto& r = ins_vec[i]->float_feasigns_;
+        int id = 0;
+        for (size_t j = 0; j < r.size(); ++j) {
+          if (r[j].slot() == i) {
+            float_cpu[i * 24 + id] = r[j].sign().float_feasigns_;
+            id ++;
+          }
+        }
+      }
+      PADDLE_ENFORCE_EQ(float_cpu.size(), total_instance * 24, "assert fail");
+      cudaMemcpy(tensor_ptr, float_cpu.data(), sizeof(float) * total_instance * 24), cudaMemcpyHostToDevice);
+    } else if (type[0] == 'u') {
+      // printf("slot[%d]: total feanum[%d]\n", (int)i, (int)total_instance);
+      float* tensor_ptr = feed_vec_[i]->mutable_data<float>({total_instance, 11}, this->place_);
+      cudaMemset(tensor_ptr, 0, sizeof(float) * total_instance * 11);
+      dest_cpu_p[i] = static_cast<float*>(tensor_ptr);
+    }
+  }
+
+
+  // fprintf(stderr, "after create tensor\n");
+  auto buf = memory::AllocShared(this->GetPlace(), row_size * sizeof(float*));
+  float** dest_gpu_p = reinterpret_cast<float**>(buf->ptr());
+  cudaMemcpy(dest_gpu_p, dest_cpu_p.data(), row_size * sizeof(float*), cudaMemcpyHostToDevice);
+
+  FuseCopyForTensor(this->GetPlace(), fea_list_gpu, dest_gpu_p, gpu_offset_data, total_size, col_size);
+}
+
+
 void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
 #if defined(PADDLE_WITH_CUDA) && defined(_LINUX)
   Timer timer;
