@@ -1711,6 +1711,15 @@ int PaddleBoxDataFeed::GetCurrentPhase() {
 
 void PaddleBoxDataFeed::PutToFeedVec(const std::vector<Record*>& ins_vec) {
 #if defined(PADDLE_WITH_CUDA) && defined(_LINUX)
+  ins_content_vec_.clear();
+  ins_content_vec_.reserve(ins_vec.size());
+  ins_id_vec_.clear();
+  ins_id_vec_.reserve(ins_vec.size());
+  for (size_t i = 0; i < ins_vec.size(); ++i) {
+    auto& r = ins_vec[i];
+    ins_id_vec_.push_back(r->ins_id_);
+    ins_content_vec_.push_back(r->content_);
+  }
   Timer timer;
   timer.Resume();
 
