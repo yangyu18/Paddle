@@ -1306,6 +1306,18 @@ void MultiSlotDataset::PreprocessChannel(
         multi_consume_channel_[i]->Clear();
       }
     }
+    for (size_t i = 0; i < multi_pv_output_.size(); ++i) {
+      if (!multi_pv_output_[i]) {
+        continue;
+      }
+      multi_pv_output_[i]->Clear();
+    }
+    for (size_t i = 0; i < multi_pv_consume_.size(); ++i) {
+      if (!multi_pv_consume_[i]) {
+        continue;
+      }
+      multi_pv_consume_[i]->Clear();
+    }
   }
   int end_size = 0;
   if (cur_channel_ == 0) {
