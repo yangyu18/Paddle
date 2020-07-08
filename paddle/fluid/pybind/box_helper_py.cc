@@ -94,6 +94,8 @@ void BindBoxWrapper(py::module* m) {
            py::call_guard<py::gil_scoped_release>())
       .def("finalize", &framework::BoxWrapper::Finalize,
            py::call_guard<py::gil_scoped_release>())
+      .def("init_rank", &framework::BoxWrapper::InitRank,
+           py::call_guard<py::gil_scoped_release>())
       .def("release_pool", &framework::BoxWrapper::ReleasePool,
            py::call_guard<py::gil_scoped_release>());
 }  // end BoxWrapper

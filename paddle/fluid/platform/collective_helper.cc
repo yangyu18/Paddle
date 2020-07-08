@@ -101,6 +101,36 @@ void NCCLCommContext::CreateAllNCCLComms(const std::vector<int>& dev_ids,
   });
 }
 
+void NCCLCommContext::CreateNCCLCommForBox(const std::vector<int>& dev_ids,
+                                           ncclUniqueId* nccl_id, int nranks,
+                                           int rank, int ring_id) {
+  PADDLE_ENFORCE_GT(dev_ids.size(), 0);
+  const int kDevices = dev_ids.size();
+  VLOG(0) << "begin CreateNCCLCommForBox device number: " << kDevices
+          << ", nranks: " << nranks << ", rank: " << rank;
+  ncclComm_t comms[kDevices];
+  {
+    PADDLE_ENFORCE_CUDA_SUCCESS(dynload::ncclGroupStart());
+    for (int i = 0; i < kDevices; i++) {
+      cudaSetDevice(i);
+      platform::dynload::ncclCommInitRank(comms + i, kDevices * nranks,
+                                          *nccl_id, rank * kDevices + i);
+    }
+    VLOG(0) << "ncclCommInitRank done";
+    PADDLE_ENFORCE_CUDA_SUCCESS(dynload::ncclGroupEnd());
+  }
+  PADDLE_ENFORCE_EQ(comm_map_.count(ring_id), 0);
+  for (size_t i = 0; i < dev_ids.size(); ++i) {
+    AssignNCCLComm(comms[i], dev_ids.size(), i, dev_ids[i], ring_id);
+    VLOG(0) << "nccl communicator of rank " << i << " in ring " << ring_id
+            << " has been created on device " << dev_ids[i];
+  }
+
+  std::call_once(once_flag_, []() {
+    std::atexit([]() { NCCLCommContext::Instance().ReleaseNCCLComms(); });
+  });
+}
+
 NCCLComm* NCCLCommContext::AssignNCCLComm(ncclComm_t comm, int nranks, int rank,
                                           int dev_id, int ring_id) {
   std::unique_ptr<CUDADeviceContext> dev_ctx(

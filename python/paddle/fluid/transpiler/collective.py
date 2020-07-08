@@ -384,5 +384,36 @@ class SingleProcessMultiThread(GradAllReduce):
         self.mode = "single_process_multi_thread"
 
     def _transpile_startup_program(self):
+        print("begin to _transpile_startup_program")
         block = self.startup_program.global_block()
-        block.append_op(type='c_comm_init_all', attrs={'ring_id': 0})
+        self._init_communicator(self.startup_program, self.current_endpoint,
+                                self.endpoints, self.rank, 1, self.wait_port)
+
+    def _init_communicator(self, program, current_endpoint, endpoints, rank,
+                           ring_id, wait_port):
+        print("begin to _init_communicator")
+        print("current_endpoint: ", current_endpoint)
+        print("endpoints: ", endpoints)
+        print("rank: %d, ring_id: %d" % (rank, ring_id))
+
+        nranks = len(endpoints)
+        other_endpoints = endpoints[:]
+        other_endpoints.remove(current_endpoint)
+        if rank == 0 and wait_port:
+            wait_server_ready(other_endpoints)
+
+        block = program.global_block()
+        nccl_id_var = block.create_var(
+            name=unique_name.generate('nccl_id'),
+            persistable=True,
+            type=core.VarDesc.VarType.RAW)
+        block.append_op(
+            type='c_gen_nccl_id',
+            inputs={},
+            outputs={'Out': nccl_id_var},
+            attrs={
+                'rank': rank,
+                'endpoint': current_endpoint,
+                'other_endpoints': other_endpoints,
+                self.op_role_key: OpRole.Forward
+            })

@@ -237,7 +237,15 @@ class BoxWrapper {
       keys_tensor.resize(platform::GetCUDADeviceCount());
     }
   }
+  int& InitNcclDone() {
+    static int x = 0;
+    return x;
+  }
 
+  void InitRank(int nranks, int rank_id) {
+    nranks_ = nranks;
+    rank_id_ = rank_id;
+  }
   int GetFeedpassThreadNum() const { return feedpass_thread_num_; }
 
   void Finalize() {
@@ -709,6 +717,8 @@ class BoxWrapper {
 
  public:
   static std::shared_ptr<boxps::PaddleShuffler> data_shuffle_;
+  int nranks_;
+  int rank_id_;
 
   // Auc Runner
  public:
