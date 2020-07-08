@@ -379,22 +379,27 @@ class SingleProcessMultiThread(GradAllReduce):
     '''
     '''
 
-    def __init__(self):
-        GradAllReduce.__init__(self, 1)
+    def __init__(self, nrings=1):
+        GradAllReduce.__init__(self, nrings)
         self.mode = "single_process_multi_thread"
 
     def _transpile_startup_program(self):
-        print("begin to _transpile_startup_program")
-        block = self.startup_program.global_block()
-        self._init_communicator(self.startup_program, self.current_endpoint,
-                                self.endpoints, self.rank, 1, self.wait_port)
+        if len(self.endpoints) > 1:
+            print("begin to _transpile_startup_program for multi-node")
+            print("current_endpoint: ", self.current_endpoint)
+            print("endpoints: ", self.endpoints)
+            print("rank: %d, ring_id: %d" % (self.rank, self.nrings))
+            for ring_id in range(self.nrings):
+                self._init_communicator(self.startup_program,
+                                        self.current_endpoint, self.endpoints,
+                                        self.rank, ring_id, self.wait_port)
+        else:
+            print("begin to _transpile_startup_program for single-node")
+            block = self.startup_program.global_block()
+            block.append_op(type='c_comm_init_all', attrs={'ring_id': 0})
 
     def _init_communicator(self, program, current_endpoint, endpoints, rank,
                            ring_id, wait_port):
-        print("begin to _init_communicator")
-        print("current_endpoint: ", current_endpoint)
-        print("endpoints: ", endpoints)
-        print("rank: %d, ring_id: %d" % (rank, ring_id))
 
         nranks = len(endpoints)
         other_endpoints = endpoints[:]
@@ -415,5 +420,16 @@ class SingleProcessMultiThread(GradAllReduce):
                 'rank': rank,
                 'endpoint': current_endpoint,
                 'other_endpoints': other_endpoints,
+                self.op_role_key: OpRole.Forward
+            })
+        block.append_op(
+            type='c_comm_init',
+            inputs={'X': nccl_id_var},
+            outputs={},
+            attrs={
+                'nranks': nranks,
+                'rank': rank,
+                'ring_id': ring_id,
+                'has_multithread': True,
                 self.op_role_key: OpRole.Forward
             })

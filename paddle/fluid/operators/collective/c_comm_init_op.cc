@@ -53,9 +53,20 @@ class CCommInitOp : public framework::OperatorBase {
     int rank_id = Attr<int>("rank");
     int rid = Attr<int>("ring_id");
 
-    platform::NCCLCommContext::Instance().CreateNCCLComm(
-        nccl_id, nranks, rank_id,
-        BOOST_GET_CONST(platform::CUDAPlace, place).device, rid);
+    bool has_multithread = Attr<bool>("has_multithread");
+    if (has_multithread) {
+      std::vector<int> devices = Attr<std::vector<int>>("devices");
+      if (devices.empty()) {
+        devices = platform::GetSelectedDevices();
+      }
+      platform::NCCLCommContext::Instance().CreateNCCLCommGroup(
+          devices, nccl_id, nranks, rank_id, rid);
+    } else {
+      platform::NCCLCommContext::Instance().CreateNCCLComm(
+          nccl_id, nranks, rank_id,
+          BOOST_GET_CONST(platform::CUDAPlace, place).device, rid);
+    }
+
 #else
     PADDLE_THROW("PaddlePaddle should compile with GPU.");
 #endif
@@ -74,6 +85,13 @@ Initialize collective communicatoin context within this trainer
     AddAttr<int>("nranks", "(int) The number of ranks of distributed trainers");
     AddAttr<int>("rank",
                  "(int) The rank of the trainer in distributed training.");
+    AddAttr<bool>("has_multithread",
+                  "(bool) Have multi threads in each trainer.")
+        .SetDefault(false);
+    AddAttr<std::vector<int>>("devices",
+                              "(std::vector<int>) which devices does the nccl "
+                              "comm initialized on in each trainer")
+        .SetDefault({});
     AddAttr<int>("ring_id", "(int default 0) user specified ring id")
         .SetDefault(0);
   }

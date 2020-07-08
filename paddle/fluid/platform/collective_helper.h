@@ -71,9 +71,9 @@ class NCCLCommContext {
 
   void CreateAllNCCLComms(const std::vector<int>& dev_ids, int ring_id = 0);
 
-  void CreateNCCLCommForBox(const std::vector<int>& dev_ids,
-                            ncclUniqueId* nccl_id, int nranks, int rank,
-                            int ring_id);
+  void CreateNCCLCommGroup(const std::vector<int>& dev_ids,
+                           ncclUniqueId* nccl_id, int nranks, int rank,
+                           int ring_id);
 
   // a latter comm with the same dev_id and the same ring_id
   // will override the former

@@ -256,22 +256,6 @@ void PipelineTrainer::InitTrainerEnv(const ProgramDesc& main_program,
   if (pipeline_num_ > 1 && sync_steps_ != -1) {
     construct_sync_functor();
   }
-
-#ifdef PADDLE_WITH_BOX_PS
-  auto box_ptr = BoxWrapper::GetInstance();
-  if (box_ptr->InitNcclDone() == 0) {
-    VLOG(0) << "Init NCCL for boxps";
-    std::vector<int> devices = platform::GetSelectedDevices();
-
-    auto var = root_scope_->FindVar("nccl_id_0");
-    ncclUniqueId* nccl_id = var->GetMutable<ncclUniqueId>();
-
-    platform::NCCLCommContext::Instance().CreateNCCLCommForBox(
-        devices, nccl_id, box_ptr->nranks_, box_ptr->rank_id_, 0);
-    box_ptr->InitNcclDone() = 1;
-    VLOG(0) << "Init NCCL done";
-  }
-#endif
 }
 
 void PipelineTrainer::construct_sync_functor() {
