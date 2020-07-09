@@ -349,6 +349,7 @@ class DistributedStrategy(fluid.BuildStrategy):
         self.recompute_checkpoints = []
         self.use_amp = False  # use mixed precision optimizer
         self.amp_loss_scaling = 2**15
+        self.user_defined_transpiler = None
 
         self.exec_strategy = fluid.ExecutionStrategy()
 
@@ -403,7 +404,7 @@ class CollectiveOptimizer(DistributedOptimizer):
         self._recompute_checkpoints = strategy.recompute_checkpoints
         self._use_amp = strategy.use_amp
         self._amp_loss_scaling = strategy.amp_loss_scaling
-        self.print_config = False
+        self.print_config = True
 
     def backward(self,
                  loss,
@@ -479,6 +480,7 @@ class CollectiveOptimizer(DistributedOptimizer):
         config.nccl_comm_num = self._strategy.nccl_comm_num
         config.use_hierarchical_allreduce = self._strategy.use_hierarchical_allreduce
         config.hierarchical_allreduce_inter_nranks = self._strategy.hierarchical_allreduce_inter_nranks
+        config.user_defined_transpiler = self._strategy.user_defined_transpiler
 
         t = dist_transpiler.DistributeTranspiler(config=config)
         t.transpile(
@@ -514,7 +516,9 @@ class CollectiveOptimizer(DistributedOptimizer):
         return node_num
 
     def _try_to_compile(self, startup_program, main_program):
+        print("begin _try_to_compile")
         node_num = self._node_num()
+        print("node_num: %d" % (node_num))
         assert node_num >= 1, "nccl2 node_num must >= 1, now:{}" % node_num
 
         exec_strategy = self._strategy.exec_strategy
@@ -604,7 +608,7 @@ class CollectiveOptimizer(DistributedOptimizer):
         process, but currently the optimization part is written into Fleet(). A user does not
         need to care about how to startup a pserver node.
         """
-
+        print("begin minimize in Collective ")
         # check optimizer conflicts
         if self._forward_recompute:
             if self._recompute_checkpoints == []:

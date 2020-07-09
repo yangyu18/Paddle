@@ -210,6 +210,7 @@ class DistributeTranspilerConfig(object):
     # if mode is collective
     # supported modes: grad_allreduce, local_sgd
     collective_mode = None
+    user_defined_transpiler = None
 
     def __init__(self):
         pass
@@ -411,17 +412,14 @@ class DistributeTranspiler(object):
                               current_endpoint,
                               startup_program=None,
                               main_program=None,
-                              wait_port=True):
+                              wait_port=True,
+                              user_defined_transpiler=None):
         if isinstance(trainers, str):
             endpoints = trainers.split(",")
         elif isinstance(trainers, list):
             endpoints = trainers
         elif collective_mode != "single_process_multi_thread":
             raise ValueError('invalid trainers config: ' + str(trainers))
-
-        if len(endpoints
-               ) == 1 and collective_mode != "single_process_multi_thread":
-            raise ValueError('invalid trainer number in distributed: 1')
 
         if startup_program is None:
             startup_program = default_startup_program()
@@ -430,12 +428,15 @@ class DistributeTranspiler(object):
             main_program = default_main_program()
 
         transpiler = None
-        if collective_mode == 'grad_allreduce':
+        if collective_mode == 'user_defined':
+            assert user_defined_transpiler is not None, "in user_defined mode, but no user_defined_transpiler"
+            transpiler = user_defined_transpiler
+        elif collective_mode == 'grad_allreduce':
             transpiler = collective.GradAllReduce(self.config.nccl_comm_num)
         elif collective_mode == 'local_sgd':
             transpiler = collective.LocalSGD(self.config.nccl_comm_num)
-        elif collective_mode == "single_process_multi_thread":
-            transpiler = collective.SingleProcessMultiThread()
+        elif collective_mode == "multi_thread":
+            transpiler = collective.MultiThread()
         else:
             raise ValueError('invalid collective_mode: %s' % collective_mode)
 
@@ -637,7 +638,8 @@ WIKI: https://github.com/PaddlePaddle/Fleet/blob/develop/markdown_doc/transpiler
                 current_endpoint=current_endpoint,
                 startup_program=startup_program,
                 main_program=program,
-                wait_port=self.config.wait_port)
+                wait_port=self.config.wait_port,
+                user_defined_transpiler=self.config.user_defined_transpiler)
             return
 
         self.trainer_num = trainers

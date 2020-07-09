@@ -28,7 +28,7 @@ from .. import core, unique_name
 from ..framework import Program, default_main_program, default_startup_program
 from .details import wait_server_ready
 
-__all__ = ['GradAllReduce', 'LocalSGD']
+__all__ = ['GradAllReduce', 'LocalSGD', 'MultiThread']
 
 OpRole = core.op_proto_and_checker_maker.OpRole
 
@@ -96,8 +96,14 @@ class Collective(object):
                                     self.wait_port)
         self._broadcast_params()
 
-    def _init_communicator(self, program, current_endpoint, endpoints, rank,
-                           ring_id, wait_port):
+    def _init_communicator(self,
+                           program,
+                           current_endpoint,
+                           endpoints,
+                           rank,
+                           ring_id,
+                           wait_port,
+                           has_multithread=False):
         nranks = len(endpoints)
         other_endpoints = endpoints[:]
         other_endpoints.remove(current_endpoint)
@@ -127,6 +133,7 @@ class Collective(object):
                 'nranks': nranks,
                 'rank': rank,
                 'ring_id': ring_id,
+                'has_multithread': has_multithread,
                 self.op_role_key: OpRole.Forward
             })
 
@@ -375,7 +382,7 @@ class LocalSGD(Collective):
                 attrs={self.op_role_key: OpRole.Optimize})
 
 
-class SingleProcessMultiThread(GradAllReduce):
+class MultiThread(GradAllReduce):
     '''
     '''
 
@@ -390,46 +397,18 @@ class SingleProcessMultiThread(GradAllReduce):
             print("endpoints: ", self.endpoints)
             print("rank: %d, ring_id: %d" % (self.rank, self.nrings))
             for ring_id in range(self.nrings):
-                self._init_communicator(self.startup_program,
-                                        self.current_endpoint, self.endpoints,
-                                        self.rank, ring_id, self.wait_port)
+                self._init_communicator(
+                    self.startup_program, self.current_endpoint, self.endpoints,
+                    self.rank, ring_id, self.wait_port, True)
         else:
             print("begin to _transpile_startup_program for single-node")
             block = self.startup_program.global_block()
             block.append_op(type='c_comm_init_all', attrs={'ring_id': 0})
 
-    def _init_communicator(self, program, current_endpoint, endpoints, rank,
-                           ring_id, wait_port):
-
-        nranks = len(endpoints)
-        other_endpoints = endpoints[:]
-        other_endpoints.remove(current_endpoint)
-        if rank == 0 and wait_port:
-            wait_server_ready(other_endpoints)
-
-        block = program.global_block()
-        nccl_id_var = block.create_var(
-            name=unique_name.generate('nccl_id'),
-            persistable=True,
-            type=core.VarDesc.VarType.RAW)
-        block.append_op(
-            type='c_gen_nccl_id',
-            inputs={},
-            outputs={'Out': nccl_id_var},
-            attrs={
-                'rank': rank,
-                'endpoint': current_endpoint,
-                'other_endpoints': other_endpoints,
-                self.op_role_key: OpRole.Forward
-            })
-        block.append_op(
-            type='c_comm_init',
-            inputs={'X': nccl_id_var},
-            outputs={},
-            attrs={
-                'nranks': nranks,
-                'rank': rank,
-                'ring_id': ring_id,
-                'has_multithread': True,
-                self.op_role_key: OpRole.Forward
-            })
+    def _insert_scale_loss_grad_ops(self):
+        '''
+        In order to keep the learning rate consistent in different numbers of
+        training workers, we scale the loss grad by the number of workers
+        But it turns out that at lease in asq, we get better resutl when not scale this
+        '''
+        pass
