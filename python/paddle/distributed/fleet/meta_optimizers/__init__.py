@@ -22,3 +22,4 @@ from .lars_optimizer import LarsOptimizer
 from .parameter_server_graph_optimizer import ParameterServerGraphOptimizer
 from .dgc_optimizer import DGCOptimizer
 from .lamb_optimizer import LambOptimizer
+from .ascend_optimizer import AscendOptimizer

@@ -33,6 +33,7 @@ set(PYBIND_SRCS
   fleet_wrapper_py.cc
   heter_wrapper_py.cc
   gloo_wrapper_py.cc
+  ascend_wrapper_py.cc
   box_helper_py.cc
   data_set_py.cc
   imperative.cc

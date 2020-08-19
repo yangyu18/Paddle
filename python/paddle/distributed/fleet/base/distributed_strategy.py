@@ -986,3 +986,24 @@ class DistributedStrategy(object):
         for f in fields:
             print("{}: {}".format(f.name, f.default_value))
         return str(self.strategy)
+
+    @property
+    def ascend(self):
+        return self.strategy.ascend
+
+    @ascend.setter
+    def ascend(self, flag):
+        if isinstance(flag, bool):
+            self.strategy.ascend = flag
+        else:
+            print("WARNING: ascend should have value of bool type")
+
+    @property
+    def ascend_configs(self):
+        return get_msg_dict(self.strategy.ascend_configs)
+
+    @ascend_configs.setter
+    def ascend_configs(self, configs):
+        check_configs_key(self.strategy.ascend_configs, configs,
+                          "ascend_configs")
+        assign_configs_value(self.strategy.ascend_configs, configs)

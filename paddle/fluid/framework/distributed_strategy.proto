@@ -91,6 +91,8 @@ message AsyncConfig {
 
 message PipelineConfig { optional int32 micro_batch = 1 [ default = 1 ]; }
 
+message AscendConfig { optional int32 placeholder = 1 [ default = 1 ]; }
+
 message DistributedStrategy {
   // bool options
   optional Mode mode = 1 [ default = COLLECTIVE ];
@@ -116,6 +118,7 @@ message DistributedStrategy {
   optional bool cudnn_exhaustive_search = 21 [ default = true ];
   optional int32 conv_workspace_size_limit = 22 [ default = 4000 ];
   optional bool cudnn_batchnorm_spatial_persistent = 23 [ default = true ];
+  optional bool ascend = 24 [ default = false ];
 
   optional RecomputeConfig recompute_configs = 101;
   optional AMPConfig amp_configs = 102;
@@ -126,6 +129,7 @@ message DistributedStrategy {
   optional AsyncConfig a_sync_configs = 107;
   optional LarsConfig lars_configs = 108;
   optional LambConfig lamb_configs = 109;
+  optional AscendConfig ascend_configs = 110;
   optional BuildStrategy build_strategy = 201;
   optional ExecutionStrategy execution_strategy = 202;
 }
