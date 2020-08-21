@@ -271,7 +271,7 @@ class SequencePoolFunctor<platform::CPUDeviceContext, T> {
                   const std::string pooltype, T pad_value,
                   const framework::LoDTensor& input,
                   framework::LoDTensor* output, bool is_test,
-                  framework::Tensor* index = nullptr) {
+                  framework::Tensor* index = nullptr, bool filter = false) {
     if (pooltype == "MAX") {
       if (is_test) {
         math::MaxSeqPoolFunctor<T, true> max_pool;

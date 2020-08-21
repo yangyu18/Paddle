@@ -88,6 +88,34 @@ struct SumPoolFunctor {
 };
 
 template <typename T>
+struct SumPoolFunctorFilter {
+  HOSTDEVICE void operator()(const T* input, const T pad_value,
+                             const size_t start, const size_t end,
+                             const size_t item_dim, T* output, int* index) {
+    for (int tid = threadIdx.x; tid < item_dim; tid += blockDim.x) {
+      if (start == end) {
+        output[tid] = pad_value;
+      } else {
+        T val = static_cast<T>(0);
+        for (int i = start; i < end; ++i) {
+          T show = input[item_dim * i + 0];
+          T click = input[item_dim * i + 1];
+          if ((show - click) * 0.2 + click < 2) {
+            continue;
+          }
+          if (tid <= 1) {  // show & click
+            val += input[item_dim * i + tid];
+          } else {
+            val += ((int)(input[item_dim * i + tid] * 256 + 0.5)) / 256.0;
+          }
+        }
+        output[tid] = val;
+      }
+    }
+  }
+};
+
+template <typename T>
 struct SqrtPoolFunctor {
   HOSTDEVICE void operator()(const T* input, const T pad_value,
                              const size_t start, const size_t end,
@@ -162,7 +190,7 @@ class SequencePoolFunctor<platform::CUDADeviceContext, T> {
                   const std::string pooltype, T pad_value,
                   const framework::LoDTensor& input,
                   framework::LoDTensor* output, bool is_test,
-                  framework::Tensor* index = nullptr) {
+                  framework::Tensor* index = nullptr, bool filter = false) {
     auto lod_level = input.lod().size();
     auto& lod = input.lod()[lod_level - 1];
     const size_t item_dim = output->numel() / output->dims()[0];
@@ -181,11 +209,20 @@ class SequencePoolFunctor<platform::CUDADeviceContext, T> {
           lod.CUDAData(context.GetPlace()), lod.size(), item_dim,
           output->mutable_data<T>(context.GetPlace()), nullptr);
     } else if (pooltype == "SUM") {
-      sequence_pool_kernel<
-          T, SumPoolFunctor<T>><<<grid, threads, 0, context.stream()>>>(
-          SumPoolFunctor<T>(), input.data<T>(), pad_value,
-          lod.CUDAData(context.GetPlace()), lod.size(), item_dim,
-          output->mutable_data<T>(context.GetPlace()), nullptr);
+      if (filter) {
+        sequence_pool_kernel<
+            T, SumPoolFunctorFilter<T>><<<grid, threads, 0, context.stream()>>>(
+            SumPoolFunctorFilter<T>(), input.data<T>(), pad_value,
+            lod.CUDAData(context.GetPlace()), lod.size(), item_dim,
+            output->mutable_data<T>(context.GetPlace()), nullptr);
+      } else {
+        sequence_pool_kernel<
+            T, SumPoolFunctor<T>><<<grid, threads, 0, context.stream()>>>(
+            SumPoolFunctor<T>(), input.data<T>(), pad_value,
+            lod.CUDAData(context.GetPlace()), lod.size(), item_dim,
+            output->mutable_data<T>(context.GetPlace()), nullptr);
+      }
+
     } else if (pooltype == "SQRT") {
       sequence_pool_kernel<
           T, SqrtPoolFunctor<T>><<<grid, threads, 0, context.stream()>>>(

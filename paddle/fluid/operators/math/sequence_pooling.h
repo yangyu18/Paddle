@@ -29,7 +29,7 @@ class SequencePoolFunctor {
   void operator()(const DeviceContext& context, const std::string pooltype,
                   T pad_value, const framework::LoDTensor& input,
                   framework::LoDTensor* output, bool is_test = false,
-                  framework::Tensor* index = nullptr);
+                  framework::Tensor* index = nullptr, bool filter = false);
 };
 
 template <typename DeviceContext, typename T>
