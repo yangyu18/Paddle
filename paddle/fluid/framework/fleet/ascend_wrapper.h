@@ -27,7 +27,8 @@ limitations under the License. */
 namespace paddle {
 namespace framework {
 
-typedef std::vector<std::string> AscendGraphDesc;
+// typedef std::vector<std::string> AscendGraphDesc;
+typedef std::string AscendGraphDesc;
 
 class AscendInstance {
  public:
@@ -56,9 +57,10 @@ class AscendInstance {
                           "graph_idx %d must be less than subgraph number %lu",
                           graph_idx, ascend_graphs_.size()));
     const AscendGraphDesc& graph = ascend_graphs_[graph_idx];
-    for (const auto& e : graph) {
-      VLOG(0) << "Ascend Graph[" << graph_idx << "] run " << e;
-    }
+    // for (const auto& e : graph) {
+    //   VLOG(0) << "Ascend Graph[" << graph_idx << "] run " << e;
+    // }
+    VLOG(0) << "Ascend Graph[" << graph_idx << "] run " << graph;
   }
 
  protected:
