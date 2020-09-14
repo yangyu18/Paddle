@@ -24,6 +24,8 @@ limitations under the License. */
 #include "paddle/fluid/platform/place.h"
 #include "paddle/fluid/platform/timer.h"
 
+#include <ge/ge_api.h>
+
 namespace paddle {
 namespace framework {
 
@@ -35,7 +37,12 @@ class AscendInstance {
   virtual ~AscendInstance() {}
   AscendInstance() {}
   // need to expose pybind function
-  void InitGlobalResouces() { VLOG(0) << "InitGlobalResouces"; }
+  void InitGlobalResouces() {
+    VLOG(0) << "Begin InitGlobalResouces"; 
+    ge::Status status = ge::GEInitialize({});
+    PADDLE_ENFORCE_EQ(status, ge::SUCCESS, paddle::platform::errors::PreconditionNotMet("Initialize ge failed"));
+    VLOG(0) << "End InitGlobalResouces"; 
+  }
 
   void DestroyAscendGlobalResources() {}
 
