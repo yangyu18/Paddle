@@ -2623,6 +2623,7 @@ All parameter, weight, gradient are variables in Paddle.
   BindDataset(&m);
   BindGenerator(&m);
   BindAscendWrapper(&m);
+  BindAscendGraph(&m);
 #ifdef PADDLE_WITH_CRYPTO
   BindCrypto(&m);
 #endif

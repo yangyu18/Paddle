@@ -30,7 +30,11 @@ class AscendTriggerCPUKernel : public framework::OpKernel<T> {
     auto graph_idx = ctx.Attr<int>("graph_idx");
 
     VLOG(0) << "AscendTriggerCPUKernel, run graph: " << graph_idx;
-    ascend_ptr->RunAscendSubgraph(graph_idx);
+
+    
+    auto inputs = ctx.MultiInput<framework::Tensor>("FeedList");
+    auto outputs = ctx.MultiOutput<framework::Tensor>("FetchList");
+    ascend_ptr->RunAscendSubgraph(graph_idx, inputs, &outputs);
   }
 };
 

@@ -36,6 +36,7 @@ namespace py = pybind11;
 namespace paddle {
 namespace pybind {
 
+void BindAscendGraph(py::module* m);
 void BindAscendWrapper(py::module* m);
 
 }  // namespace pybind
