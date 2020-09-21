@@ -81,16 +81,56 @@ class AscendInstance {
     PADDLE_ENFORCE_EQ(status, ge::SUCCESS, paddle::platform::errors::PreconditionNotMet("AddGraph failed"));
   }
 
+
+  ge::DataType ge_type(proto::VarType::Type type) {
+    if (type == proto::VarType::FP32) {
+      return ge::DataType::DT_FLOAT;
+    } else if (type == proto::VarType::FP64) {
+    return ge::DataType::DT_DOUBLE;
+    } else if (type == proto::VarType::INT32) {
+      return ge::DataType::DT_INT32;
+    } else if (type == proto::VarType::INT64) {
+      return ge::DataType::DT_INT64;
+    } else {
+      PADDLE_THROW("unsupported ge type");
+    }
+  }
+  int ge_size(proto::VarType::Type type) {
+    if (type == proto::VarType::FP32) {
+      return 4;
+    } else if (type == proto::VarType::FP64) {
+      return 8;
+    } else if (type == proto::VarType::INT32) {
+      return 4;
+    } else if (type == proto::VarType::INT64) {
+      return 8;
+    } else {
+      PADDLE_THROW("unsupported ge type");
+    }
+  }
   ge::Tensor make_ge_tensor(const Tensor *tensor) {
     auto numel = tensor->numel();
-    VLOG(0) << "input numel: " << numel;
-    ge::Shape shape(std::vector<int64_t>{static_cast<int64_t>(numel), 1});
-    ge::TensorDesc tensor_desc(shape, ge::Format::FORMAT_ND, ge::DataType::DT_FLOAT);
-    tensor_desc.SetRealDimCnt(2);
+    
+    std::vector<int64_t> vec_dim;
+    auto dimen = arity(tensor->dims());
+    for (auto i = 0; i < dimen; ++i) {
+      vec_dim.push_back(tensor->dims()[i]);
+    }
 
-    const uint8_t* data = reinterpret_cast<const uint8_t*>(tensor->data<float>());
-    std::vector<uint8_t> d(numel * 4);
-    memcpy(d.data(), data, sizeof(float) * numel);
+
+    VLOG(0) << "input numel: " << numel << ", dimen is " << vec_dim.size() << ", and shape is";
+    for (const auto e : vec_dim) {
+      VLOG(0) << e;
+    }
+
+
+    ge::Shape shape(vec_dim);
+    ge::TensorDesc tensor_desc(shape, ge::Format::FORMAT_ND, ge_type(tensor->type()));
+    tensor_desc.SetRealDimCnt(vec_dim.size());
+
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(tensor->data<void>());
+    std::vector<uint8_t> d(numel * ge_size(tensor->type()));
+    memcpy(d.data(), data, ge_size(tensor->type()) * numel); // Note, other than 32bit may have problem
     ge::Tensor ge_tensor(tensor_desc, d);
     return ge_tensor;
   }
@@ -111,13 +151,26 @@ class AscendInstance {
     VLOG(0) << "run graph done";
 
     // change tensor back
-    const uint8_t* ret_data = ge_outputs[0].GetData();
-    size_t size = ge_outputs[0].GetSize();
-    VLOG(0) << "GE Tensor size: " << size;
-    auto *d = (*outputs)[0]->mutable_data<uint8_t>({8}, platform::CPUPlace());
-    for (size_t i = 0; i< size; ++i) {
-      d[i] = ret_data[i];
+
+    for (size_t i = 0; i < ge_outputs.size(); ++i) {
+      const uint8_t* ret_data = ge_outputs[i].GetData();
+      size_t size = ge_outputs[i].GetSize();
+      VLOG(0) << "GE Tensor size for output var " << i << " is " << size;
+      auto *d = (*outputs)[i]->mutable_data<uint8_t>({(long int)size}, platform::CPUPlace());
+      memcpy(d, ret_data, size);
+      // for (size_t i = 0; i < size; ++i) {
+      //   d[i] = ret_data[i];
+      // }
+
+      // Following for debug:
+      VLOG(0) << "output for " << i << " var: ";
+      float *tmp = reinterpret_cast<float*>(d);
+      for (size_t j = 0; j < size / 4; ++j) {
+        printf("%f ", tmp[j]);
+      }
+      printf("\n");
     }
+
   }
 
  protected:
