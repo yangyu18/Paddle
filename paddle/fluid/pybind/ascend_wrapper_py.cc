@@ -80,7 +80,6 @@ enum AttrType{
 
 void BindAscendGraph(py::module* m) {
     m->def("ge_initialize", &ge_initialize, "GEInitialize");
-
     m->def("ge_finalize", &GEFinalize, "GEFinalize");
 
     //枚举封装
@@ -294,31 +293,124 @@ void BindAscendGraph(py::module* m) {
         .def("get_inputs_size", &Operator::GetInputsSize)
         .def("get_outputs_size", &Operator::GetOutputsSize)
         .def("get_all_attr_names_and_types", &Operator::GetAllAttrNamesAndTypes)
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, int64_t)) & Operator::SetAttr)
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, int32_t)) & Operator::SetAttr)
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, uint32_t)) & Operator::SetAttr)
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, const std::vector<int64_t> &)) & Operator::SetAttr)
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, const std::vector<int32_t> &)) & Operator::SetAttr)
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, const std::vector<uint32_t> &)) & Operator::SetAttr)
-        .def("set_attr", [](Operator &op, const std::string &name, std::initializer_list<int64_t>& attrValue) -> Operator& {
+        .def("set_attr_int64", [](Operator &op, const std::string &name, int64_t value) -> Operator&{
+            int64_t tar = (int64_t) value;
+            return op.SetAttr(name, tar);
+        })
+        .def("set_attr_int32", [](Operator &op, const std::string &name, int32_t value) -> Operator&{
+            int32_t tar = (int32_t) value;
+            return op.SetAttr(name, tar);
+        })
+        .def("set_attr_uint32", [](Operator &op, const std::string &name, uint32_t value) -> Operator&{
+            uint32_t tar = (uint32_t) value;
+            return op.SetAttr(name, tar);
+        })
+        .def("set_attr_vec_int64", 
+            [](Operator &op, const std::string &name, const std::vector<int64_t> &value) -> Operator&{
+            int len = value.size();
+            std::vector<int64_t> tar;
+            int64_t tmp;
+            for (int i=0; i < len; i++){
+                tmp = (int64_t) value[i];
+                tar.push_back(tmp);
+            }
+            return op.SetAttr(name, tar);
+        })
+        .def("set_attr_vec_int32", 
+            [](Operator &op, const std::string &name, const std::vector<int32_t> &value) -> Operator&{
+            int len = value.size();
+            std::vector<int32_t> tar;
+            int32_t tmp;
+            for (int i=0; i < len; i++){
+                tmp = (int32_t) value[i];
+                tar.push_back(tmp);
+            }
+            return op.SetAttr(name, tar);
+        })
+        .def("set_attr_vec_uint32", 
+            [](Operator &op, const std::string &name, const std::vector<uint32_t> &value) -> Operator&{
+            int len = value.size();
+            std::vector<uint32_t> tar;
+            uint32_t tmp;
+            for (int i=0; i < len; i++){
+                tmp = (uint32_t) value[i];
+                tar.push_back(tmp);
+            }
+            return op.SetAttr(name, tar);
+        })
+        .def("set_attr_list_int64", 
+            [](Operator &op, const std::string &name, std::initializer_list<int64_t>& attrValue) -> Operator& {
             return op.SetAttr(name, std::move(attrValue));
         })
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, float)) & Operator::SetAttr)
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, const std::vector<float> &)) & Operator::SetAttr)
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, const std::vector<std::string> &)) & Operator::SetAttr)
-        .def("set_attr", [](Operator &op, const std::string &name, AttrValue& attrValue) -> Operator& {
+        .def("set_attr_attrvalue", [](Operator &op, const std::string &name, AttrValue& attrValue) -> Operator& {
             return op.SetAttr(name, std::move(attrValue));
         })
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, const std::string &)) & Operator::SetAttr)
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, bool)) & Operator::SetAttr)
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, const std::vector<bool> &)) & Operator::SetAttr)
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, const Tensor &)) & Operator::SetAttr)
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, const std::vector<Tensor> &)) & Operator::SetAttr)
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, const std::vector<uint8_t> &)) & Operator::SetAttr)
-        .def("set_attr",
+        .def("set_attr_float", [](Operator &op, const std::string &name, float value) -> Operator&{
+            float tar = (float) value;
+            return op.SetAttr(name, tar);
+        })
+        .def("set_attr_vec_float", [](Operator &op, const std::string &name, const std::vector<float> &value) -> Operator&{
+            int len = value.size();
+            std::vector<float> tar;
+            float tmp;
+            for (int i=0; i < len; i++){
+                tmp = (float) value[i];
+                tar.push_back(tmp);
+            }
+            return op.SetAttr(name, tar);
+        })
+        .def("set_attr_string", (Operator & (Operator::*)(const std::string &, const std::string &)) & Operator::SetAttr)
+        .def("set_attr_vec_string",
+            (Operator & (Operator::*)(const std::string &, const std::vector<std::string> &)) & Operator::SetAttr)
+        .def("set_attr_bool", [](Operator &op, const std::string &name, bool value) -> Operator&{
+            if (value)
+                return op.SetAttr(name, true);
+            else
+                return op.SetAttr(name, false);
+        })
+        .def("set_attr_vec_bool", [](Operator &op, const std::string &name, const std::vector<bool> &value) -> Operator&{
+            int len = value.size();
+            std::vector<bool> tar;
+            for (int i=0; i < len; i++){
+                if (value[i])
+                    tar.push_back(true);
+                else
+                    tar.push_back(false);
+            }
+            return op.SetAttr(name, tar);
+        })
+        .def("set_attr_tensor", (Operator & (Operator::*)(const std::string &, const Tensor &)) & Operator::SetAttr)
+        .def("set_attr_vec_tensor", 
+            (Operator & (Operator::*)(const std::string &, const std::vector<Tensor> &)) & Operator::SetAttr)
+        .def("set_attr_vec_uint8", 
+            [](Operator &op, const std::string &name, const std::vector<uint8_t> &value) -> Operator&{
+            int len = value.size();
+            std::vector<uint8_t> tar;
+            uint8_t tmp;
+            for (int i=0; i < len; i++){
+                tmp = (uint8_t) value[i];
+                tar.push_back(tmp);
+            }
+            return op.SetAttr(name, tar);
+        })
+        .def("set_attr_vec_vec_int64",
             (Operator & (Operator::*)(const std::string &, const std::vector<std::vector<int64_t> > &)) & Operator::SetAttr)
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, const std::vector<DataType> &)) & Operator::SetAttr)
-        .def("set_attr", (Operator & (Operator::*)(const std::string &, const DataType &)) & Operator::SetAttr)
+        .def("set_attr_vec_dtype", 
+            [](Operator &op, const std::string &name, const std::vector<DataType> &value) -> Operator&{
+            int len = value.size();
+            std::vector<ge::DataType> tar;
+            ge::DataType tmp;
+            for (int i=0; i < len; i++){
+                tmp = (ge::DataType) value[i];
+                tar.push_back(tmp);
+            }
+            return op.SetAttr(name, tar);
+        })
+        .def("set_attr_dtype", [](Operator &op, const std::string &name, const DataType &value) -> Operator&{
+            ge::DataType tar = (ge::DataType) value;
+            return op.SetAttr(name, tar);
+        })
+
         .def("get_attr", [](Operator &op, const std::string &name, AttrType type)->py::tuple{
             graphStatus res = -1;
             switch (type) {
@@ -460,27 +552,6 @@ void BindAscendGraph(py::module* m) {
                     break;
             }
         })
-
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, int64_t &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, int32_t &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, uint32_t &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, std::vector<int64_t> &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, std::vector<int32_t> &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, std::vector<uint32_t> &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, float &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, std::vector<float> &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, AttrValue &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, std::string &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, std::vector<std::string> &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, bool &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, std::vector<bool> &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, Tensor &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, std::vector<Tensor> &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, std::vector<uint8_t> &) const) & Operator::GetAttr)
-        .def("get_attr",
-            (graphStatus(Operator::*)(const std::string &, std::vector<std::vector<int64_t> > &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, std::vector<DataType> &) const) & Operator::GetAttr)
-        .def("get_attr", (graphStatus(Operator::*)(const std::string &, DataType &) const) & Operator::GetAttr)
         .def("break_connect", &Operator::BreakConnect)
         .def("get_subgraph_names_count", &Operator::GetSubgraphNamesCount)
         .def("get_subgraph_names", &Operator::GetSubgraphNames)
