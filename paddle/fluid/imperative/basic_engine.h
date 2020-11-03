@@ -18,12 +18,15 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include "paddle/fluid/imperative/all_reduce.h"
 #include "paddle/fluid/imperative/engine.h"
 #include "paddle/fluid/imperative/gradient_accumulator.h"
+#include "paddle/fluid/framework/lod_tensor.h"
 
+
+DECLARE_int32(bc);
 namespace paddle {
 namespace imperative {
-
 class VarBase;
 class OpBase;
 
@@ -50,6 +53,13 @@ class BasicEngine : public Engine {
   std::vector<std::pair<GradientAccumulator*, std::shared_ptr<VariableWrapper>>>
       need_accu_var_list_;
   bool retain_graph_;
+
+  std::vector<framework::Tensor> buckets_;
+  std::vector<int> last_index_in_bucket_;
+  std::vector<int> num_in_bucket_;
+  std::unordered_map<std::string, std::pair<int, int>> name2index_;
+  long int bucket_cap_ = FLAGS_bc * 1024 * 1024;
+  bool first_epoch = true;
 };
 
 }  // namespace imperative

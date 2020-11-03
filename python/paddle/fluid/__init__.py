@@ -200,6 +200,7 @@ def __bootstrap__():
         'free_when_no_cache_hit',
         'call_stack_level',
         'sort_sum_gradient',
+        'bc',
         'max_inplace_grad_add',
     ]
     if 'Darwin' not in sysstr:

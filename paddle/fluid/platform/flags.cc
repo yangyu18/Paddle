@@ -521,7 +521,7 @@ DEFINE_int32(
 DEFINE_bool(sort_sum_gradient, false,
             "Sum gradients by the reverse order of "
             "the forward execution sequence.");
-
+DEFINE_int32(bc, 25, "bucket cap");
 /**
  * Performance related FLAG
  * Name: max_inplace_grad_add

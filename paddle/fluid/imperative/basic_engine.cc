@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "paddle/fluid/imperative/basic_engine.h"
-
 #include <algorithm>
 #include <memory>
 #include <queue>
@@ -31,7 +30,7 @@
 #include "paddle/fluid/platform/profiler.h"
 
 DECLARE_bool(sort_sum_gradient);
-
+DECLARE_int32(bc);
 namespace paddle {
 namespace imperative {
 
@@ -64,6 +63,7 @@ void BasicEngine::Init(VarBase* var, bool retain_graph) {
   grad_var->Resize(fwd_var.dims());
   grad_var->mutable_data(fwd_var.place(), fwd_var.type());
   operators::math::set_constant(*dev_ctx, grad_var, 1.0);
+  VLOG(0) << "bucket_cap_=" << bucket_cap_;
 }
 
 void BasicEngine::CheckBackwardInputs(const OpBase& op) {
@@ -163,13 +163,21 @@ void BasicEngine::Execute() {
     return;
   }
 
+  // TODO(shenliang03): add comm stream
+  OpBase& op = (*init_node_)[0];
+  auto cur_palce = op.place();
+  int device_id = BOOST_GET_CONST(platform::CUDAPlace, cur_palce).GetDeviceId();
+  std::unique_ptr<paddle::platform::CUDADeviceContext> dev_ctx(
+      new paddle::platform::CUDADeviceContext(platform::CUDAPlace(device_id)));
+
   PrepareDeps();
   // Start execute Computation graph
   std::queue<std::shared_ptr<GradOpNode>> q;
   q.push(std::move(init_node_));
 
   size_t op_num = 0;
-
+  size_t param_num = 0;
+  int cnt = 0;
   while (!q.empty()) {
     auto shared_cur_node = std::move(q.front());
     q.pop();
@@ -220,6 +228,87 @@ void BasicEngine::Execute() {
                     cur_op.place());
       }
 
+      // FIXME: Allreduce the gradient
+      for (auto& pair : tmp_outs) {
+        if (!pair.second.IsGrad()) {
+          continue;
+        }
+        for (auto& var : pair.second) {
+          if (!var) {
+            continue;
+          }
+          std::string var_name = var->Name();
+          // VLOG(0) << var_name << " is ready..";
+          if (var_name.find("generated_tensor_") != std::string::npos) {
+            // filter out the learning_rate var
+            continue;
+          }
+          if (var_name.find("dygraph_tmp") == std::string::npos) {
+            // VLOG(0) << var_name << " is Persistable..";
+            ++param_num;
+            // Begin to push to buckets
+            // auto variable = var->MutableVar();
+            // AllReduce(*variable, var->MutableVar(), false, dev_ctx);
+
+            auto* grad_tensor = var->MutableVar()->GetMutable<framework::LoDTensor>();
+            auto numel = grad_tensor->numel();
+            if (name2index_.find(var_name) == name2index_.end()) {
+              PADDLE_ENFORCE_EQ(first_epoch, true, "other epoch shouldn't have new param");
+              // construct bucket
+              VLOG(0) << var_name << " not found";
+              if (last_index_in_bucket_.size() == 0
+              || (sizeof(float) * (last_index_in_bucket_.back() + numel) > (unsigned long int)bucket_cap_)) {
+                // the first parameter or need a new bucket
+                if (last_index_in_bucket_.size() == 0) {
+                  VLOG(0) << "first param";
+                }
+                else{
+                  VLOG(0) << "param[" << var_name << "] need a new bucket, because numel [" << numel << "] + remain [" << last_index_in_bucket_.back() << "] exceed cap";
+                }
+
+                num_in_bucket_.push_back(1);
+                name2index_[var_name] = std::make_pair<int, int>(last_index_in_bucket_.size(), 0);
+                last_index_in_bucket_.push_back(numel);
+                buckets_.push_back(framework::Tensor());
+                buckets_.back().mutable_data<float>({bucket_cap_}, cur_palce);
+                if (last_index_in_bucket_.size() > 1) {
+                  auto index = last_index_in_bucket_.size() - 2;
+                  VLOG(0) << "bucket [" << index << "] begin all_reduce";
+                  SyncCalStream(cur_palce);
+                  AllReduce(buckets_[index], &(buckets_[index]), dev_ctx);
+                }
+              } else {
+                name2index_[var_name] = std::make_pair(last_index_in_bucket_.size()-1, last_index_in_bucket_.back());
+                last_index_in_bucket_.back() += numel;
+                num_in_bucket_.back() ++;
+              }
+              auto cur_pos = name2index_[var_name];
+              VLOG(0) << "[INIT] bucket info for " << var_name << ", size [" << numel << "], position: [" << cur_pos.first << ", " << cur_pos.second << "]";
+            }
+
+            // begin to copy tensor to bucket
+            auto cur_pos = name2index_[var_name];
+            float *src_data = grad_tensor->data<float>();
+            float *dst_data = buckets_[cur_pos.first].mutable_data<float>(cur_palce);
+            // VLOG(0) << "copy " << var_name << ", size [" << numel << "], position: [" << cur_pos.first << ", " << cur_pos.second << "]";
+            cudaMemcpyAsync(dst_data + cur_pos.second, src_data, sizeof(float) * numel, cudaMemcpyDeviceToDevice, static_cast<platform::CUDADeviceContext *>(platform::DeviceContextPool::Instance().Get(cur_palce))->stream());
+            auto dim = grad_tensor->dims();
+            grad_tensor->ShareDataWith(buckets_[cur_pos.first].Slice(cur_pos.second, cur_pos.second + numel)).Resize(dim);
+            
+            cnt ++;
+            // VLOG(0) << "cnt[" << cnt << "], num_in_bucket_[cur_pos.first] [" << num_in_bucket_[cur_pos.first] << "]";
+            if (!first_epoch && cnt == num_in_bucket_[cur_pos.first]) {
+              cnt = 0;
+              // AllReduce
+              auto index = cur_pos.first;
+              VLOG(0) << "bucket [" << index << "] begin all_reduce";
+              SyncCalStream(cur_palce);
+              AllReduce(buckets_[index], &(buckets_[index]), dev_ctx);
+            }
+          }
+        }
+      }
+
       // Step 2: Sum Gradient
       for (auto& pair : need_accu_var_list_) {
         pair.first->Add(std::move(pair.second), cur_op.id());
@@ -248,9 +337,17 @@ void BasicEngine::Execute() {
       }
     }
   }
+  if (first_epoch && last_index_in_bucket_.size() > 1) {
+    auto index = last_index_in_bucket_.size() - 1;
+    VLOG(0) << "bucket [" << index << "] begin all_reduce";
+    SyncCalStream(cur_palce);
+    AllReduce(buckets_[index], &(buckets_[index]), dev_ctx);
+  }
+  SyncCommStream(dev_ctx);
   Clear();
-
   VLOG(1) << "Backward op number: " << op_num;
+  // VLOG(0) << "Backward param number: " << param_num;
+  first_epoch = false;
 }
 
 void BasicEngine::Clear() {
