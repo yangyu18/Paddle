@@ -36,6 +36,7 @@ limitations under the License. */
 #include "paddle/fluid/imperative/nccl_context.h"
 #include "paddle/fluid/imperative/partial_grad_engine.h"
 #include "paddle/fluid/imperative/profiler.h"
+#include "paddle/fluid/imperative/reducer.h"
 #include "paddle/fluid/imperative/tracer.h"
 #include "paddle/fluid/imperative/type_defs.h"
 #include "paddle/fluid/memory/allocation/mmap_allocator.h"
@@ -1185,6 +1186,21 @@ void BindImperative(py::module *m_ptr) {
       .def(py::init<const imperative::ParallelStrategy &,
                     const platform::CUDAPlace &>())
       .def("init", [](imperative::NCCLParallelContext &self) { self.Init(); });
+#endif
+
+#ifdef PADDLE_WITH_NCCL
+  py::class_<imperative::Reducer, std::shared_ptr<imperative::Reducer>>(
+      m, "Reducer", R"DOC()DOC")
+      .def(py::init<std::vector<std::size_t>, int64_t, bool>(),
+           py::arg("test_vec1") = std::vector<std::size_t>{1, 2, 3, 4},
+           py::arg("test_int64") = 33, py::arg("test_bool") = false,
+           py::call_guard<py::gil_scoped_release>())
+      .def("print_data", &imperative::Reducer::Print_Data,
+           py::call_guard<py::gil_scoped_release>());
+
+  m.def("assign_bucket_by_size", &imperative::assign_bucket_by_size,
+        py::arg("tensors"), py::call_guard<py::gil_scoped_release>());
+
 #endif
 }
 

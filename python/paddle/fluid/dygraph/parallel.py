@@ -424,6 +424,22 @@ class DataParallel(layers.Layer):
         else:
             self._strategy = _build_default_parallel_strategy()
 
+        self.init_reducer()
+
+    def init_reducer(self):
+        # Build list of parameters which is trainable.
+        self.parameters = [
+            param
+            for _, param in filter(
+                lambda (_, param): param.trainable,
+                self.named_parameters(include_sublayers=True))
+        ]
+        print(self.parameters)
+        core.assign_bucket_by_size(self.parameters)
+
+        self._reducer = core.Reducer(
+            test_vec1=[1, 2, 3, 4], test_int64=10, test_bool=True)
+
     def forward(self, *inputs, **kwargs):
         return self._layers(*inputs, **kwargs)
 
