@@ -40,6 +40,57 @@ class MLP(fluid.Layer):
         return y
 
 
+class TestDataParallelBucket(unittest.TestCase):
+    def create_varbase(self, dtype, shape):
+        return core.VarBase(dtype, shape, "", core.VarDesc.VarType.LOD_TENSOR,
+                            True)
+
+    def test_construct_bucket1(self):
+        # one dtype & one limit cap
+        var_list = []
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP32, [2, 50]))
+        var_list.append(
+            self.create_varbase(core.VarDesc.VarType.FP32, [2, 100]))
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP32, [2, 50]))
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP32, [2, 25]))
+        res = core.assign_bucket_by_size(var_list, [400])
+        self.assertEqual([[0], [1], [2], [3]], res)
+
+    def test_construct_bucket1(self):
+        # multi dtype & one limit cap
+        var_list = []
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP32, [1, 50]))
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP64, [1, 25]))
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP32, [1, 50]))
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP64, [1, 25]))
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP32, [1, 50]))
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP64, [1, 25]))
+        res = core.assign_bucket_by_size(var_list, [400])
+        self.assertEqual([[0, 2], [1, 3], [4], [5]], res)
+
+    def test_construct_bucket2(self):
+        # one dtype & multi limit cap
+        var_list = []
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP32, [2, 50]))
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP32, [2, 50]))
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP32, [2, 50]))
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP32, [2, 50]))
+        res = core.assign_bucket_by_size(var_list, [400, 800])
+        self.assertEqual([[0], [1, 2], [3]], res)
+
+    def test_construct_bucket3(self):
+        # multi dtype & multi limit cap
+        var_list = []
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP32, [1, 50]))
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP64, [1, 25]))
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP32, [1, 50]))
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP64, [1, 25]))
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP32, [1, 50]))
+        var_list.append(self.create_varbase(core.VarDesc.VarType.FP64, [1, 25]))
+        res = core.assign_bucket_by_size(var_list, [200, 400])
+        self.assertEqual([[0], [1], [2, 4], [3, 5]], res)
+
+
 class TestDataParallelStateDict(unittest.TestCase):
     def test_data_parallel_state_dict(self):
         with fluid.dygraph.guard():
