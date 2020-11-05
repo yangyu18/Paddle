@@ -24,6 +24,105 @@
 namespace paddle {
 namespace imperative {
 
+std::shared_ptr<Reducer> Reducer::s_instance_ = NULL;
+
+Reducer::Reducer(const std::vector<std::shared_ptr<imperative::VarBase>> &vars,
+                 const std::vector<std::vector<size_t>> &bucket_indices)
+    : vars_(vars) {
+  VLOG(0) << "Start construct the Reducer ...";
+  // initialize_buckets
+  initialize_buckets(bucket_indices);
+}
+
+void Reducer::initialize_buckets(
+    const std::vector<std::vector<size_t>> &bucket_indices) {
+  VLOG(0) << "Start initialize buckets ..";
+  // clear the bucket
+  buckets_.clear();
+  buckets_.reserve(bucket_indices.size());
+
+  auto bucket_nums = bucket_indices.size();
+  for (size_t bucket_index = 0; bucket_index < bucket_nums; ++bucket_index) {
+    Bucket bucket;
+    int64_t all_length = 0;
+    bucket.pending = bucket_indices[bucket_index].size();
+    bucket.variable_indices_ = bucket_indices[bucket_index];
+    size_t offset = 0;
+
+    for (size_t index = 0; index < bucket_indices[bucket_index].size();
+         ++index) {
+      const auto variable_index = bucket_indices[bucket_index][index];
+      const auto &var = vars_[variable_index];
+      const auto var_name = var->Name();
+
+      // TODO(shenliang03): to process the selectrows
+      auto lod_tensor = var->MutableVar()->GetMutable<framework::LoDTensor>();
+
+      PADDLE_ENFORCE_EQ(lod_tensor->IsInitialized(), true,
+                        platform::errors::InvalidArgument(
+                            "Tensor `%s` is not initialized.", var_name));
+      auto size = lod_tensor->numel();
+      PADDLE_ENFORCE_GT(
+          size, 0, platform::errors::InvalidArgument(
+                       "The number of tensor `%s`'s elements is 0.", var_name));
+      all_length += size;
+
+      bucket.offset_.push_back(offset);
+      bucket.length_.push_back(size);
+      offset += size;
+
+      // check the dtype and place, it must be same.
+      auto dtype = var->DataType();
+      auto place = var->Place();
+      if (index > 0) {
+        PADDLE_ENFORCE_EQ(dtype, bucket.dtype,
+                          platform::errors::InvalidArgument(
+                              "Tensor `%s` has different dtype.", var_name));
+        PADDLE_ENFORCE_EQ(place, bucket.place,
+                          platform::errors::InvalidArgument(
+                              "Tensor `%s` has different place.", var_name));
+      } else {
+        bucket.dtype = dtype;
+        bucket.place = place;
+      }
+    }
+
+    // Alloc the continuous space
+    bucket.contents.Resize(framework::make_ddim({all_length}))
+        .mutable_data(bucket.place, bucket.dtype);
+
+    // Debug Message For Reducer
+    VLOG(0) << "the buckets_[" << bucket_index << "] basic message:";
+    VLOG(0) << "offset:";
+    for (auto ele : bucket.offset_) VLOG(0) << ele;
+    VLOG(0) << "length:";
+    for (auto ele : bucket.length_) VLOG(0) << ele;
+
+    initialize_grad_space(bucket);
+    buckets_.emplace_back(std::move(bucket));
+  }
+}
+
+void Reducer::initialize_grad_space(const Bucket &bucket) {
+  const std::vector<size_t> &global_indices = bucket.variable_indices_;
+  const auto &offset = bucket.offset_;
+  const auto &length = bucket.length_;
+  for (size_t index = 0; index < global_indices.size(); ++index) {
+    const auto &var = vars_[global_indices[index]];  // varbase of var
+    auto &grad_var = var->GradVarBase();             // varbase of var grad
+    auto tensor = var->MutableVar()->GetMutable<framework::LoDTensor>();
+    auto grad_tensor =
+        grad_var->MutableVar()->GetMutable<framework::LoDTensor>();
+    // ?? can't get grad tensor size, assume tensor'size = grad'size
+    auto dim = tensor->dims();
+    grad_tensor
+        ->ShareDataWith(bucket.contents.Slice(
+            static_cast<int64_t>(offset[index]),
+            static_cast<int64_t>(offset[index] + length[index])))
+        .Resize(dim);
+  }
+}
+
 void Reducer::Print_Data() {
   std::cout << "Currently, we can set the number :";
 }
@@ -31,9 +130,7 @@ void Reducer::Print_Data() {
 std::vector<std::vector<size_t>> assign_bucket_by_size(
     const std::vector<std::shared_ptr<imperative::VarBase>> &vars,
     const std::vector<size_t> &bucket_size_limits) {
-  std::cout << "vars.size()" << vars.size() << std::endl;
-
-  // the return vectorr
+  // the return vector
   std::vector<std::vector<size_t>> res;
 
   // Key: the var type

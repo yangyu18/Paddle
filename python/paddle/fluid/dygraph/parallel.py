@@ -428,15 +428,18 @@ class DataParallel(layers.Layer):
 
     def init_reducer(self):
         # Build list of parameters which is trainable.
-        self.parameters = [
+        trainable_parameters = [
             param
             for _, param in filter(
                 lambda (_, param): param.trainable,
                 self.named_parameters(include_sublayers=True))
         ]
-        core.assign_bucket_by_size(self.parameters, [25 * 1024 * 1024])
-
-        self._reducer = core.Reducer()
+        # self.bucket_indices = core.assign_bucket_by_size(self.parameters, [25 * 1024 * 1024])
+        self.bucket_indices = core.assign_bucket_by_size(trainable_parameters,
+                                                         [0])
+        print("bucket_indices : {}".format(self.bucket_indices))
+        self._reducer = core.Reducer(trainable_parameters,
+                                     list(reversed(self.bucket_indices)))
 
     def forward(self, *inputs, **kwargs):
         return self._layers(*inputs, **kwargs)
