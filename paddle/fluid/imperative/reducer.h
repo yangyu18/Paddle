@@ -34,10 +34,24 @@ class Reducer {
   std::vector<std::size_t> data;
   int c;
   bool d;
+
+  struct Bucket {
+    framework::Tensor contents_;
+    std::vector<size_t> offset_;
+    std::vector<framework::Variable> vars_;
+
+    // Global indices of participating variables in the bucket
+    std::vector<size_t> variable_indices;
+
+    // Number of params that haven't been ready
+    size_t pending = -1;
+    bool is_sparse_ = false;
+  };
 };
 
-void assign_bucket_by_size(
-    const std::vector<std::shared_ptr<imperative::VarBase>>& tensors);
+std::vector<std::vector<size_t>> assign_bucket_by_size(
+    const std::vector<std::shared_ptr<imperative::VarBase>>& tensors,
+    const std::vector<size_t>& bucket_size_limits);
 
 }  // namespace imperative
 }  // namespace paddle
