@@ -21,32 +21,38 @@
 namespace paddle {
 namespace imperative {
 
+struct Bucket {
+  framework::Tensor contents_;
+  std::vector<size_t> offset_;
+  std::vector<framework::Variable> vars_;
+
+  // Global indices of participating variables in the bucket
+  std::vector<size_t> variable_indices;
+
+  // Number of params that haven't been ready
+  size_t pending = -1;
+  bool is_sparse_ = false;
+};
+
 class Reducer {
  public:
-  explicit Reducer(std::vector<std::size_t> a, int c, bool d)
-      : data(a), c(c), d(d) {}
+  Reducer() {}
 
   virtual ~Reducer() {}
 
   void Print_Data();
 
+  // Reducer singleton
+  static std::shared_ptr<Reducer> GetInstance() {
+    if (NULL == s_instance_) {
+      s_instance_.reset(new paddle::imperative::Reducer());
+    }
+    return s_instance_;
+  }
+
  protected:
-  std::vector<std::size_t> data;
-  int c;
-  bool d;
-
-  struct Bucket {
-    framework::Tensor contents_;
-    std::vector<size_t> offset_;
-    std::vector<framework::Variable> vars_;
-
-    // Global indices of participating variables in the bucket
-    std::vector<size_t> variable_indices;
-
-    // Number of params that haven't been ready
-    size_t pending = -1;
-    bool is_sparse_ = false;
-  };
+ private:
+  static std::shared_ptr<Reducer> s_instance_;
 };
 
 std::vector<std::vector<size_t>> assign_bucket_by_size(

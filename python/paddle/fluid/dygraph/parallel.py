@@ -434,11 +434,9 @@ class DataParallel(layers.Layer):
                 lambda (_, param): param.trainable,
                 self.named_parameters(include_sublayers=True))
         ]
-        print(self.parameters)
         core.assign_bucket_by_size(self.parameters, [25 * 1024 * 1024])
 
-        self._reducer = core.Reducer(
-            test_vec1=[1, 2, 3, 4], test_int64=10, test_bool=True)
+        self._reducer = core.Reducer()
 
     def forward(self, *inputs, **kwargs):
         return self._layers(*inputs, **kwargs)

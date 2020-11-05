@@ -1191,10 +1191,7 @@ void BindImperative(py::module *m_ptr) {
 #ifdef PADDLE_WITH_NCCL
   py::class_<imperative::Reducer, std::shared_ptr<imperative::Reducer>>(
       m, "Reducer", R"DOC()DOC")
-      .def(py::init<std::vector<std::size_t>, int64_t, bool>(),
-           py::arg("test_vec1") = std::vector<std::size_t>{1, 2, 3, 4},
-           py::arg("test_int64") = 33, py::arg("test_bool") = false,
-           py::call_guard<py::gil_scoped_release>())
+      .def(py::init([]() { return imperative::Reducer::GetInstance(); }))
       .def("print_data", &imperative::Reducer::Print_Data,
            py::call_guard<py::gil_scoped_release>());
 

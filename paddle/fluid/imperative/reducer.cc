@@ -26,22 +26,12 @@ namespace imperative {
 
 void Reducer::Print_Data() {
   std::cout << "Currently, we can set the number :";
-  for (auto ele : data) {
-    std::cout << ele << std::endl;
-  }
 }
 
 std::vector<std::vector<size_t>> assign_bucket_by_size(
     const std::vector<std::shared_ptr<imperative::VarBase>> &vars,
     const std::vector<size_t> &bucket_size_limits) {
   std::cout << "vars.size()" << vars.size() << std::endl;
-  // for (auto ele : vars) {
-  //   std::cout<< "=========" <<std::endl;
-  //   std::cout << ele->Name() << std::endl;
-  //   std::cout<< "=========" <<std::endl;
-  //   std::cout << ele->DataType() << std::endl;
-  //   std::cout << ele->GradVarName() << std::endl;
-  // }
 
   // the return vectorr
   std::vector<std::vector<size_t>> res;

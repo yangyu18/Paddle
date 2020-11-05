@@ -110,37 +110,6 @@ class TestDataParallelStateDict(unittest.TestCase):
             loss = mse_loss(input=out, label=label)
             loss.backward()
 
-            # optimizer.minimize(loss)
-            # single_state = mlp.state_dict()
-            # parallel_state = parallel_mlp.state_dict()
-
-            # base_para = {}
-            # place = fluid.CPUPlace() if not core.is_compiled_with_cuda(
-            # ) else fluid.CUDAPlace(0)
-            # for k, v in single_state.items():
-            #     self.assertTrue(k in parallel_state)
-
-            #     self.assertTrue(
-            #         np.array_equal(v.numpy(), parallel_state[k].numpy()))
-
-            #     base_para[k] = v.numpy()
-
-            # for k, v in parallel_state.items():
-            #     np_t = v.numpy()
-            #     var = v.value().get_tensor()
-            #     var.set(np.zeros_like(np_t), place)
-
-            #     self.assertTrue(np.sum(np.abs(v.numpy())) == 0)
-
-            # parallel_mlp.set_dict(base_para)
-
-            # parallel_state = parallel_mlp.state_dict()
-
-            # for k, v in parallel_state.items():
-            #     self.assertTrue(np.array_equal(v.numpy(), base_para[k]))
-
-            # parallel_mlp.load_dict(base_para)
-
 
 if __name__ == '__main__':
     unittest.main()
