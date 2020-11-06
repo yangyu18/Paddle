@@ -381,6 +381,11 @@ void EagerGradientAccumulator::Add(std::shared_ptr<VariableWrapper> var,
     } else {
       VariableWrapperAdd(var, var_, unchange_input);
     }
+    // add dist hook
+    if (cur_cnt_ == ref_cnt_) {
+      auto reducer_ptr_ = Reducer::GetInstance();
+      reducer_ptr_->add_dist_hook(var_);
+    }
   } else {
     if (!var_->Var().IsInitialized() ||
         !var_->Var().Get<framework::LoDTensor>().IsInitialized()) {

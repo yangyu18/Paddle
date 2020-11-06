@@ -1194,14 +1194,8 @@ void BindImperative(py::module *m_ptr) {
       .def(py::init(
           [](const std::vector<std::shared_ptr<imperative::VarBase>> &vars,
              const std::vector<std::vector<size_t>> &bucket_indices) {
-            return imperative::Reducer::GetInstance(vars, bucket_indices);
+            return imperative::Reducer::SetInstance(vars, bucket_indices);
           }))
-
-      // .def(py::init([](int embedx_dim, int expand_embed_dim) {
-      //   return framework::BoxWrapper::SetInstance(embedx_dim,
-      //   expand_embed_dim);
-      // }))
-
       .def("print_data", &imperative::Reducer::Print_Data,
            py::call_guard<py::gil_scoped_release>());
 

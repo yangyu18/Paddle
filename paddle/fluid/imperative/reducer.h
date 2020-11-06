@@ -15,8 +15,13 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <unordered_map>
 #include <vector>
+#include "paddle/fluid/imperative/all_reduce.h"
 #include "paddle/fluid/imperative/layer.h"
+#include "paddle/fluid/imperative/variable_wrapper.h"
+#include "paddle/fluid/memory/memory.h"
 
 namespace paddle {
 namespace imperative {
@@ -35,7 +40,12 @@ struct Bucket {
 
   // external message of bucket
   framework::proto::VarType::Type dtype;
-  platform::Place place;
+};
+
+struct VariableIndex {
+  // record the index in buckets_
+  size_t bucket_index;
+  size_t variable_index;
 };
 
 class Reducer {
@@ -53,13 +63,28 @@ class Reducer {
 
   void Print_Data();
 
-  // Reducer singleton
-  static std::shared_ptr<Reducer> GetInstance(
+  void add_dist_hook(VariableWrapper* var_warpper);
+
+  void mark_variable_ready(const VariableIndex& var_index,
+                           VariableWrapper* var_warpper);
+
+  void mark_bucket_ready(size_t bucket_index);
+
+  void finalize_backward();
+  // Reducer Singleton
+  static std::shared_ptr<Reducer> SetInstance(
       const std::vector<std::shared_ptr<imperative::VarBase>>& vars,
       const std::vector<std::vector<size_t>>& bucket_indices) {
     if (NULL == s_instance_) {
       s_instance_.reset(new paddle::imperative::Reducer(vars, bucket_indices));
     }
+    return s_instance_;
+  }
+
+  static std::shared_ptr<Reducer> GetInstance() {
+    PADDLE_ENFORCE_EQ(
+        s_instance_ != NULL, true,
+        platform::errors::InvalidArgument("Reducer is not initialized."));
     return s_instance_;
   }
 
@@ -70,6 +95,10 @@ class Reducer {
  private:
   static std::shared_ptr<Reducer> s_instance_;
   std::vector<Bucket> buckets_;
+  size_t next_bucket_ = 0;
+  std::unordered_map<std::string, VariableIndex> varname2index_;
+  platform::Place place_;
+  std::unique_ptr<paddle::platform::CUDADeviceContext> dev_ctx_;
 };
 
 std::vector<std::vector<size_t>> assign_bucket_by_size(

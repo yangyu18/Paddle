@@ -30,8 +30,31 @@ Reducer::Reducer(const std::vector<std::shared_ptr<imperative::VarBase>> &vars,
                  const std::vector<std::vector<size_t>> &bucket_indices)
     : vars_(vars) {
   VLOG(0) << "Start construct the Reducer ...";
-  // initialize_buckets
+  // initialize buckets
   initialize_buckets(bucket_indices);
+
+  // initialize varname2index_
+  {
+    size_t index = 0;
+    for (size_t bucket_index = 0; bucket_index < bucket_indices.size();
+         ++bucket_index) {
+      for (size_t var_index = 0;
+           var_index < bucket_indices[bucket_index].size(); ++var_index) {
+        const std::string &var_name = vars_[index]->Name();
+        varname2index_[var_name] = VariableIndex{
+            .bucket_index = bucket_index, .variable_index = var_index,
+        };
+        index += 1;
+      }
+    }
+  }
+
+  // initialize DeviceContext
+  int device_id = BOOST_GET_CONST(platform::CUDAPlace, place_).GetDeviceId();
+  std::unique_ptr<paddle::platform::CUDADeviceContext> dev_ctx(
+      new paddle::platform::CUDADeviceContext(platform::CUDAPlace(device_id)));
+  // VLOG(0) << "device_id:  " << device_id;
+  dev_ctx_ = std::move(dev_ctx);
 }
 
 void Reducer::initialize_buckets(
@@ -78,18 +101,18 @@ void Reducer::initialize_buckets(
         PADDLE_ENFORCE_EQ(dtype, bucket.dtype,
                           platform::errors::InvalidArgument(
                               "Tensor `%s` has different dtype.", var_name));
-        PADDLE_ENFORCE_EQ(place, bucket.place,
+        PADDLE_ENFORCE_EQ(place, place_,
                           platform::errors::InvalidArgument(
                               "Tensor `%s` has different place.", var_name));
       } else {
         bucket.dtype = dtype;
-        bucket.place = place;
+        place_ = place;
       }
     }
 
     // Alloc the continuous space
     bucket.contents.Resize(framework::make_ddim({all_length}))
-        .mutable_data(bucket.place, bucket.dtype);
+        .mutable_data(place_, bucket.dtype);
 
     // Debug Message For Reducer
     VLOG(0) << "the buckets_[" << bucket_index << "] basic message:";
@@ -125,6 +148,75 @@ void Reducer::initialize_grad_space(const Bucket &bucket) {
 
 void Reducer::Print_Data() {
   std::cout << "Currently, we can set the number :";
+}
+
+void Reducer::add_dist_hook(VariableWrapper *var_warpper) {
+  const std::string &var_name = var_warpper->Name();
+  if (varname2index_.find(var_name) == varname2index_.end()) {
+    VLOG(3) << "This var is not trainable";
+    return;
+  }
+  // PADDLE_ENFORCE_EQ(varname2index_.find(var_name),
+  //                   varname2index_.end(),
+  //                   platform::errors::InvalidArgument(
+  //                             "Reducer can't find Tensor `%s`", var_name));
+  VariableIndex var_index = varname2index_[var_name];
+
+  auto &bucket_index = var_index.bucket_index;
+  // auto& variable_index = var_index.variable_index;
+  auto &bucket = buckets_[bucket_index];
+
+  mark_variable_ready(var_index, var_warpper);
+  // bucket.pending -= 1;
+  if (--bucket.pending == 0) {
+    // can start allreduce
+    mark_bucket_ready(bucket_index);
+  }
+
+  if (next_bucket_ == buckets_.size()) {
+    finalize_backward();
+  }
+}
+
+void Reducer::mark_variable_ready(const VariableIndex &var_index,
+                                  VariableWrapper *var_warpper) {
+  auto &bucket_index = var_index.bucket_index;
+  auto &variable_index = var_index.variable_index;
+  auto &bucket = buckets_[bucket_index];
+  auto offset = bucket.offset_[variable_index];
+  auto length = bucket.length_[variable_index];
+  auto &contents = bucket.contents;
+
+  auto tensor = var_warpper->MutableVar()->GetMutable<framework::LoDTensor>();
+  const auto &var_dtype = var_warpper->DataType();
+  void *src_data = tensor->mutable_data(var_warpper->Place(), var_dtype);
+
+  void *dst_data = contents
+                       .Slice(static_cast<int64_t>(offset),
+                              static_cast<int64_t>(offset + length))
+                       .mutable_data(place_, bucket.dtype);
+  // use cal_stream
+  auto *cal_stream = static_cast<platform::CUDADeviceContext *>(
+                         platform::DeviceContextPool::Instance().Get(place_))
+                         ->stream();
+  memory::Copy(BOOST_GET_CONST(platform::CUDAPlace, place_), dst_data,
+               BOOST_GET_CONST(platform::CUDAPlace, var_warpper->Place()),
+               src_data, framework::SizeOfType(var_dtype) * length, cal_stream);
+}
+
+void Reducer::mark_bucket_ready(size_t bucket_index) {
+  if (bucket_index > next_bucket_) return;
+  for (; next_bucket_ < buckets_.size() && buckets_[next_bucket_].pending == 0;
+       ++next_bucket_) {
+    SyncCalStream(place_);
+    AllReduce(buckets_[next_bucket_].contents,
+              &(buckets_[next_bucket_].contents), dev_ctx_);
+  }
+}
+
+void Reducer::finalize_backward() {
+  SyncCommStream(dev_ctx_);
+  VLOG(0) << "finalize_backward is finished...";
 }
 
 std::vector<std::vector<size_t>> assign_bucket_by_size(
