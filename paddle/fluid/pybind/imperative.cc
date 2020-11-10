@@ -1196,7 +1196,7 @@ void BindImperative(py::module *m_ptr) {
              const std::vector<std::vector<size_t>> &bucket_indices) {
             return imperative::Reducer::SetInstance(vars, bucket_indices);
           }))
-      .def("print_data", &imperative::Reducer::Print_Data,
+      .def("prepare_for_backward", &imperative::Reducer::prepare_for_backward,
            py::call_guard<py::gil_scoped_release>());
 
   m.def("assign_bucket_by_size", &imperative::assign_bucket_by_size,

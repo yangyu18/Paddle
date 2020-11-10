@@ -28,23 +28,22 @@ std::shared_ptr<Reducer> Reducer::s_instance_ = NULL;
 
 Reducer::Reducer(const std::vector<std::shared_ptr<imperative::VarBase>> &vars,
                  const std::vector<std::vector<size_t>> &bucket_indices)
-    : vars_(vars) {
+    : vars_(vars), bucket_indices_(bucket_indices) {
   VLOG(0) << "Start construct the Reducer ...";
   // initialize buckets
   initialize_buckets(bucket_indices);
 
   // initialize varname2index_
   {
-    size_t index = 0;
     for (size_t bucket_index = 0; bucket_index < bucket_indices.size();
          ++bucket_index) {
       for (size_t var_index = 0;
            var_index < bucket_indices[bucket_index].size(); ++var_index) {
-        const std::string &var_name = vars_[index]->Name();
+        size_t index = bucket_indices[bucket_index][var_index];
+        const std::string &var_name = vars_[index]->GradVarName();
         varname2index_[var_name] = VariableIndex{
             .bucket_index = bucket_index, .variable_index = var_index,
         };
-        index += 1;
       }
     }
   }
@@ -53,8 +52,12 @@ Reducer::Reducer(const std::vector<std::shared_ptr<imperative::VarBase>> &vars,
   int device_id = BOOST_GET_CONST(platform::CUDAPlace, place_).GetDeviceId();
   std::unique_ptr<paddle::platform::CUDADeviceContext> dev_ctx(
       new paddle::platform::CUDADeviceContext(platform::CUDAPlace(device_id)));
-  // VLOG(0) << "device_id:  " << device_id;
   dev_ctx_ = std::move(dev_ctx);
+
+  // release DeviceContext
+  std::call_once(once_flag_, []() {
+    std::atexit([]() { Reducer::GetInstance()->ReleaseDevCtx(); });
+  });
 }
 
 void Reducer::initialize_buckets(
@@ -68,7 +71,7 @@ void Reducer::initialize_buckets(
   for (size_t bucket_index = 0; bucket_index < bucket_nums; ++bucket_index) {
     Bucket bucket;
     int64_t all_length = 0;
-    bucket.pending = bucket_indices[bucket_index].size();
+    // bucket.pending = bucket_indices[bucket_index].size();
     bucket.variable_indices_ = bucket_indices[bucket_index];
     size_t offset = 0;
 
@@ -116,28 +119,26 @@ void Reducer::initialize_buckets(
 
     // Debug Message For Reducer
     VLOG(0) << "the buckets_[" << bucket_index << "] basic message:";
+    VLOG(0) << "all_length" << all_length;
     VLOG(0) << "offset:";
     for (auto ele : bucket.offset_) VLOG(0) << ele;
     VLOG(0) << "length:";
     for (auto ele : bucket.length_) VLOG(0) << ele;
 
-    initialize_grad_space(bucket);
     buckets_.emplace_back(std::move(bucket));
   }
 }
 
-void Reducer::initialize_grad_space(const Bucket &bucket) {
+void Reducer::set_grad_space(const Bucket &bucket) {
   const std::vector<size_t> &global_indices = bucket.variable_indices_;
   const auto &offset = bucket.offset_;
   const auto &length = bucket.length_;
   for (size_t index = 0; index < global_indices.size(); ++index) {
     const auto &var = vars_[global_indices[index]];  // varbase of var
     auto &grad_var = var->GradVarBase();             // varbase of var grad
-    auto tensor = var->MutableVar()->GetMutable<framework::LoDTensor>();
     auto grad_tensor =
         grad_var->MutableVar()->GetMutable<framework::LoDTensor>();
-    // ?? can't get grad tensor size, assume tensor'size = grad'size
-    auto dim = tensor->dims();
+    auto dim = grad_tensor->dims();
     grad_tensor
         ->ShareDataWith(bucket.contents.Slice(
             static_cast<int64_t>(offset[index]),
@@ -146,28 +147,30 @@ void Reducer::initialize_grad_space(const Bucket &bucket) {
   }
 }
 
-void Reducer::Print_Data() {
-  std::cout << "Currently, we can set the number :";
+void Reducer::prepare_for_backward() {
+  VLOG(0) << "start reseting count..";
+  next_bucket_ = 0;
+  for (size_t bucket_index = 0; bucket_index < buckets_.size();
+       ++bucket_index) {
+    auto &bucket = buckets_[bucket_index];
+    bucket.pending = bucket.variable_indices_.size();
+  }
 }
 
 void Reducer::add_dist_hook(VariableWrapper *var_warpper) {
   const std::string &var_name = var_warpper->Name();
+  // VLOG(0) << "before add_dist_hook, varname is " << var_name;
   if (varname2index_.find(var_name) == varname2index_.end()) {
-    VLOG(3) << "This var is not trainable";
+    VLOG(3) << "This " << var_name << " is not trainable";
     return;
   }
-  // PADDLE_ENFORCE_EQ(varname2index_.find(var_name),
-  //                   varname2index_.end(),
-  //                   platform::errors::InvalidArgument(
-  //                             "Reducer can't find Tensor `%s`", var_name));
+
   VariableIndex var_index = varname2index_[var_name];
 
-  auto &bucket_index = var_index.bucket_index;
-  // auto& variable_index = var_index.variable_index;
+  auto bucket_index = var_index.bucket_index;
   auto &bucket = buckets_[bucket_index];
 
   mark_variable_ready(var_index, var_warpper);
-  // bucket.pending -= 1;
   if (--bucket.pending == 0) {
     // can start allreduce
     mark_bucket_ready(bucket_index);
@@ -180,8 +183,8 @@ void Reducer::add_dist_hook(VariableWrapper *var_warpper) {
 
 void Reducer::mark_variable_ready(const VariableIndex &var_index,
                                   VariableWrapper *var_warpper) {
-  auto &bucket_index = var_index.bucket_index;
-  auto &variable_index = var_index.variable_index;
+  auto bucket_index = var_index.bucket_index;
+  auto variable_index = var_index.variable_index;
   auto &bucket = buckets_[bucket_index];
   auto offset = bucket.offset_[variable_index];
   auto length = bucket.length_[variable_index];
@@ -209,6 +212,9 @@ void Reducer::mark_bucket_ready(size_t bucket_index) {
   for (; next_bucket_ < buckets_.size() && buckets_[next_bucket_].pending == 0;
        ++next_bucket_) {
     SyncCalStream(place_);
+    // Debug Message
+    // VLOG(0) << "next_bucket_ : " << next_bucket_;
+    // VLOG(0) << "dims: " << buckets_[next_bucket_].contents.dims();
     AllReduce(buckets_[next_bucket_].contents,
               &(buckets_[next_bucket_].contents), dev_ctx_);
   }
@@ -216,8 +222,15 @@ void Reducer::mark_bucket_ready(size_t bucket_index) {
 
 void Reducer::finalize_backward() {
   SyncCommStream(dev_ctx_);
-  VLOG(0) << "finalize_backward is finished...";
+
+  VLOG(0) << "set gradient space by bucket";
+  for (auto &bucket : buckets_) {
+    set_grad_space(bucket);
+  }
+  VLOG(3) << "finalize_backward is finished...";
 }
+
+void Reducer::ReleaseDevCtx() { dev_ctx_.reset(); }
 
 std::vector<std::vector<size_t>> assign_bucket_by_size(
     const std::vector<std::shared_ptr<imperative::VarBase>> &vars,
@@ -270,7 +283,7 @@ std::vector<std::vector<size_t>> assign_bucket_by_size(
       res.emplace_back(std::move(bucket_info.first));
       bucket_info = std::pair<std::vector<size_t>, size_t>();
       cur_limit_index =
-          std::min(cur_limit_index + 1, bucket_size_limits.size());
+          std::min(cur_limit_index + 1, bucket_size_limits.size() - 1);
     }
   }
 

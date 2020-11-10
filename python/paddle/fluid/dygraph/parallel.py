@@ -409,7 +409,10 @@ class DataParallel(layers.Layer):
                 # train()
     """
 
-    def __init__(self, layers, strategy=None):
+    def __init__(self,
+                 layers,
+                 strategy=None,
+                 bucket_size_limits=[25 * 1024 * 1024]):
         super(DataParallel,
               self).__init__(layers.full_name() + "_data_parallel")
 
@@ -424,6 +427,7 @@ class DataParallel(layers.Layer):
         else:
             self._strategy = _build_default_parallel_strategy()
 
+        self.bucket_size_limits = bucket_size_limits
         self.init_reducer()
 
     def init_reducer(self):
@@ -434,14 +438,16 @@ class DataParallel(layers.Layer):
                 lambda (_, param): param.trainable,
                 self.named_parameters(include_sublayers=True))
         ]
-        # self.bucket_indices = core.assign_bucket_by_size(self.parameters, [25 * 1024 * 1024])
-        self.bucket_indices = core.assign_bucket_by_size(trainable_parameters,
-                                                         [0])
+        self.bucket_indices = core.assign_bucket_by_size(
+            trainable_parameters, self.bucket_size_limits)
         print("bucket_indices : {}".format(self.bucket_indices))
         self._reducer = core.Reducer(trainable_parameters,
                                      list(reversed(self.bucket_indices)))
 
     def forward(self, *inputs, **kwargs):
+        # prepare the backward
+        self._reducer.prepare_for_backward()
+
         return self._layers(*inputs, **kwargs)
 
     @deprecated(

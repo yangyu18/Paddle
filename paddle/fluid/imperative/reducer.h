@@ -59,9 +59,11 @@ class Reducer {
   void initialize_buckets(
       const std::vector<std::vector<size_t>>& bucket_indices);
 
-  void initialize_grad_space(const Bucket& bucket);
+  void set_grad_space(const Bucket& bucket);
 
-  void Print_Data();
+  void set_gradient_space(VariableWrapper* var_warpper);
+
+  void prepare_for_backward();
 
   void add_dist_hook(VariableWrapper* var_warpper);
 
@@ -71,6 +73,9 @@ class Reducer {
   void mark_bucket_ready(size_t bucket_index);
 
   void finalize_backward();
+
+  void ReleaseDevCtx();
+
   // Reducer Singleton
   static std::shared_ptr<Reducer> SetInstance(
       const std::vector<std::shared_ptr<imperative::VarBase>>& vars,
@@ -99,6 +104,7 @@ class Reducer {
   std::unordered_map<std::string, VariableIndex> varname2index_;
   platform::Place place_;
   std::unique_ptr<paddle::platform::CUDADeviceContext> dev_ctx_;
+  std::once_flag once_flag_;
 };
 
 std::vector<std::vector<size_t>> assign_bucket_by_size(
