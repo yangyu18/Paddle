@@ -41,11 +41,16 @@ Reducer::Reducer(const std::vector<std::shared_ptr<imperative::VarBase>> &vars,
          ++group_index) {
       for (size_t var_index = 0; var_index < group_indices[group_index].size();
            ++var_index) {
-        size_t index = group_indices[group_index][var_index];
-        const std::string &var_name = vars_[index]->GradVarName();
-        varname2index_[var_name] = VariableIndex{
+        size_t global_var_index = group_indices[group_index][var_index];
+        const auto variable_index = VariableIndex{
             .group_index = group_index, .variable_index = var_index,
         };
+        VLOG(0) << "add hook for var[" << vars_[global_var_index]->GradVarName()
+                << "]";
+        vars_[global_var_index]->SharedVar()->SetGradReduceHook(
+            new LambdaGradAccumulatorPostHook([=](VariableWrapper *grad) {
+              this->add_dist_hook(grad, variable_index);
+            }));
       }
     }
   }
@@ -151,15 +156,9 @@ void Reducer::prepare_for_backward() {
   }
 }
 
-void Reducer::add_dist_hook(VariableWrapper *var_warpper) {
-  const std::string &var_name = var_warpper->Name();
-  if (varname2index_.find(var_name) == varname2index_.end()) {
-    VLOG(3) << "This " << var_name << " is not trainable";
-    return;
-  }
-
-  VariableIndex var_index = varname2index_[var_name];
-
+void Reducer::add_dist_hook(VariableWrapper *var_warpper,
+                            const VariableIndex &var_index) {
+  VLOG(0) << "run add_dist_hook for var [" << var_warpper->Name() << "]";
   auto group_index = var_index.group_index;
   auto &group = groups_[group_index];
 

@@ -65,7 +65,8 @@ class Reducer {
 
   void prepare_for_backward();
 
-  void add_dist_hook(VariableWrapper* var_warpper);
+  void add_dist_hook(VariableWrapper* var_warpper,
+                     const VariableIndex& var_index);
 
   void mark_variable_ready(const VariableIndex& var_index,
                            VariableWrapper* var_warpper);
@@ -101,7 +102,6 @@ class Reducer {
   static std::shared_ptr<Reducer> s_instance_;
   std::vector<Group> groups_;
   size_t next_group_ = 0;
-  std::unordered_map<std::string, VariableIndex> varname2index_;
   platform::Place place_;
   std::once_flag once_flag_;
   std::shared_ptr<imperative::ParallelContext> parallel_ctx_;
