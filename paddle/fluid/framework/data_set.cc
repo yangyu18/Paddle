@@ -50,7 +50,9 @@ DatasetImpl<T>::DatasetImpl() {
   fleet_send_sleep_seconds_ = 0;
   merge_by_insid_ = false;
   merge_by_sid_ = true;
+  merge_by_cmatch_sid_ = true;
   enable_pv_merge_ = false;
+  enable_dup_pv_= false;
   merge_size_ = 2;
   parse_ins_id_ = false;
   parse_content_ = false;
@@ -151,8 +153,18 @@ void DatasetImpl<T>::SetMergeBySid(bool is_merge) {
 }
 
 template <typename T>
+void DatasetImpl<T>::SetMergeByCmatchSid(bool is_merge) {
+  merge_by_cmatch_sid_ = is_merge;
+}
+
+template <typename T>
 void DatasetImpl<T>::SetEnablePvMerge(bool enable_pv_merge) {
   enable_pv_merge_ = enable_pv_merge;
+}
+
+template <typename T>
+void DatasetImpl<T>::SetEnableDupPv(bool enable_dup_pv) {
+  enable_dup_pv_ = enable_dup_pv;
 }
 
 template <typename T>
@@ -634,6 +646,7 @@ void DatasetImpl<T>::CreateReaders() {
     readers_[i]->SetParseContent(parse_content_);
     readers_[i]->SetParseLogKey(parse_logkey_);
     readers_[i]->SetEnablePvMerge(enable_pv_merge_);
+    readers_[i]->SetEnableDupPv(enable_dup_pv_);
     // Notice: it is only valid for untest of test_paddlebox_datafeed.
     // In fact, it does not affect the train process when paddle is
     // complied with Box_Ps.
@@ -704,6 +717,7 @@ void DatasetImpl<T>::CreatePreLoadReaders() {
     preload_readers_[i]->SetParseContent(parse_content_);
     preload_readers_[i]->SetParseLogKey(parse_logkey_);
     preload_readers_[i]->SetEnablePvMerge(enable_pv_merge_);
+    preload_readers_[i]->SetEnableDupPv(enable_dup_pv_);
     preload_readers_[i]->SetInputChannel(input_channel_.get());
     preload_readers_[i]->SetOutputChannel(nullptr);
     preload_readers_[i]->SetConsumeChannel(nullptr);
@@ -842,10 +856,22 @@ void MultiSlotDataset::PreprocessInstance() {
       all_records.push_back(&input_records_[index]);
     }
 
-    std::sort(all_records.data(), all_records.data() + all_records_num,
-              [](const Record* lhs, const Record* rhs) {
-                return lhs->search_id < rhs->search_id;
-              });
+    if (merge_by_cmatch_sid_) {
+      std::sort(all_records.data(), all_records.data() + all_records_num,
+                [](const Record* lhs, const Record* rhs) {
+                  if (lhs->search_id == rhs->search_id) {
+                    return lhs->cmatch < rhs->cmatch;
+                  } else {
+                    return lhs->search_id < rhs->search_id;
+                  }
+                });
+    } else {
+      std::sort(all_records.data(), all_records.data() + all_records_num,
+                [](const Record* lhs, const Record* rhs) {
+                  return lhs->search_id < rhs->search_id;
+                });
+    }
+
     if (merge_by_sid_) {
       uint64_t last_search_id = 0;
       for (int i = 0; i < all_records_num; ++i) {
@@ -859,13 +885,41 @@ void MultiSlotDataset::PreprocessInstance() {
         }
         pv_data.back()->merge_instance(ins);
       }
-    } else {
+    } else if (merge_by_cmatch_sid_) {
+      uint64_t last_search_id = 0;
+      uint32_t last_cmatch = 0;
+      for (int i = 0; i < all_records_num; ++i) {
+        Record* ins = all_records[i];
+        if (i == 0 || last_search_id != ins->search_id || last_cmatch != ins->cmatch) {
+          PvInstance pv_instance = make_pv_instance();
+          pv_instance->merge_instance(ins);
+          pv_data.push_back(pv_instance);
+          last_search_id = ins->search_id;
+          last_cmatch = ins->cmatch;
+          continue;
+        }
+        pv_data.back()->merge_instance(ins);
+      }
+    }else {
       for (int i = 0; i < all_records_num; ++i) {
         Record* ins = all_records[i];
         PvInstance pv_instance = make_pv_instance();
         pv_instance->merge_instance(ins);
         pv_data.push_back(pv_instance);
       }
+    }
+
+    if (enable_dup_pv_) {
+      std::vector<PvInstance> dup_pv_data;
+      for (PvInstance& pv_ins : pv_data) {
+        for (size_t i = 0; i < pv_ins->ads.size(); i++) {
+          PvInstance dup_pv_instance = make_pv_instance();
+          dup_pv_instance->ads = pv_ins->ads;
+          dup_pv_instance->ad_idx = i;
+          dup_pv_data.emplace_back(dup_pv_instance);
+        }
+      }
+      pv_data = dup_pv_data;
     }
 
     std::shuffle(pv_data.begin(), pv_data.end(),

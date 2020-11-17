@@ -131,6 +131,7 @@ class TestDataset(unittest.TestCase):
         dataset.set_hdfs_config("my_fs_name", "my_fs_ugi")
         dataset.set_download_cmd("./read_from_afs my_fs_name my_fs_ugi")
         dataset.set_enable_pv_merge(False)
+        dataset.set_enable_dup_pv(False)
 
         thread_num = dataset.get_thread_num()
         self.assertEqual(thread_num, 12)

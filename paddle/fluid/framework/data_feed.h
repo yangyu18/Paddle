@@ -43,6 +43,15 @@ limitations under the License. */
 
 namespace paddle {
 namespace framework {
+class DataFeedDesc;
+class LoDTensor;
+class Scope;
+class Variable;
+}  // namespace framework
+}  // namespace paddle
+
+namespace paddle {
+namespace framework {
 
 // DataFeed is the base virtual class for all ohther DataFeeds.
 // It is used to read files and parse the data for subsequent trainer.
@@ -98,7 +107,18 @@ struct Record {
 
 struct PvInstanceObject {
   std::vector<Record*> ads;
-  void merge_instance(Record* ins) { ads.push_back(ins); }
+
+  int ad_idx = -1;
+  uint32_t ad_rank() {
+    if (ad_idx < 0 || ad_idx >= (int)ads.size()) {
+        return -1;
+    }
+    return ads[ad_idx]->rank;
+  }
+
+  void merge_instance(Record* ins) {
+    ads.push_back(ins);
+  }
 };
 
 using PvInstance = PvInstanceObject*;
@@ -165,6 +185,7 @@ class DataFeed {
   virtual void SetParseContent(bool parse_content) {}
   virtual void SetParseLogKey(bool parse_logkey) {}
   virtual void SetEnablePvMerge(bool enable_pv_merge) {}
+  virtual void SetEnableDupPv(bool enable_dup_pv) {}
   virtual void SetCurrentPhase(int current_phase) {}
   virtual void SetFileListMutex(std::mutex* mutex) {
     mutex_for_pick_file_ = mutex;
@@ -230,6 +251,7 @@ class DataFeed {
   std::vector<LoDTensor*> feed_vec_;
 
   LoDTensor* rank_offset_;
+  LoDTensor* dup_pv_mask_;
 
   // the batch size defined by user
   int default_batch_size_;
@@ -310,6 +332,7 @@ class InMemoryDataFeed : public DataFeed {
   virtual void SetParseContent(bool parse_content);
   virtual void SetParseLogKey(bool parse_logkey);
   virtual void SetEnablePvMerge(bool enable_pv_merge);
+  virtual void SetEnableDupPv(bool enable_dup_pv);
   virtual void SetCurrentPhase(int current_phase);
   virtual void LoadIntoMemory();
 
@@ -324,6 +347,7 @@ class InMemoryDataFeed : public DataFeed {
   bool parse_content_;
   bool parse_logkey_;
   bool enable_pv_merge_;
+  bool enable_dup_pv_;
   int current_phase_{-1};  // only for untest
   std::ifstream file_;
   std::shared_ptr<FILE> fp_;
@@ -418,6 +442,7 @@ class MultiSlotType {
 
   std::string DebugString() {
     std::stringstream ss;
+
     ss << "\ntype: " << type_ << "\n";
     ss << "offset: ";
     ss << "[";
@@ -698,7 +723,10 @@ class PaddleBoxDataFeed : public MultiSlotInMemoryDataFeed {
   virtual int GetCurrentPhase();
   virtual void GetRankOffset(const std::vector<PvInstance>& pv_vec,
                              int ins_number);
+  virtual void GetDupPvMask(const std::vector<PvInstance>& pv_vec,
+                             int ins_number);
   std::string rank_offset_name_;
+  std::string dup_pv_mask_name_;
   int pv_batch_size_;
 };
 
