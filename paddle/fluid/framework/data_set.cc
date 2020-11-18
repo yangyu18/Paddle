@@ -910,16 +910,17 @@ void MultiSlotDataset::PreprocessInstance() {
     }
 
     if (enable_dup_pv_) {
-      std::vector<PvInstance> dup_pv_data;
-      for (PvInstance& pv_ins : pv_data) {
-        for (size_t i = 0; i < pv_ins->ads.size(); i++) {
+      size_t size = pv_data.size();
+      for (size_t i = 0; i < size; i++) {
+        PvInstance pv_ins = pv_data[i];
+        pv_ins->ad_idx = 0;
+        for (size_t j = 1; j < pv_ins->ads.size(); j++) {
           PvInstance dup_pv_instance = make_pv_instance();
           dup_pv_instance->ads = pv_ins->ads;
-          dup_pv_instance->ad_idx = i;
-          dup_pv_data.emplace_back(dup_pv_instance);
+          dup_pv_instance->ad_idx = j;
+          pv_data.emplace_back(dup_pv_instance);
         }
       }
-      pv_data = dup_pv_data;
     }
 
     std::shuffle(pv_data.begin(), pv_data.end(),
