@@ -119,7 +119,11 @@ struct Record {
 
 struct PvInstanceObject {
   std::vector<Record*> ads;
-  void merge_instance(Record* ins) { ads.push_back(ins); }
+  int ad_idx = -1;
+
+  void merge_instance(Record* ins) {
+    ads.push_back(ins);
+  }
 };
 
 using PvInstance = PvInstanceObject*;
@@ -188,6 +192,7 @@ class DataFeed {
   virtual void SetParseContent(bool parse_content) {}
   virtual void SetParseLogKey(bool parse_logkey) {}
   virtual void SetEnablePvMerge(bool enable_pv_merge) {}
+  virtual void SetEnableDupPv(bool enable_dup_pv) {}
   virtual void SetCurrentPhase(int current_phase) {}
   virtual void SetFileListMutex(std::mutex* mutex) {
     mutex_for_pick_file_ = mutex;
@@ -255,6 +260,7 @@ class DataFeed {
   std::vector<LoDTensor*> feed_vec_;
 
   LoDTensor* rank_offset_;
+  LoDTensor* dup_pv_mask_;
 
   // the batch size defined by user
   int default_batch_size_;
@@ -339,6 +345,7 @@ class InMemoryDataFeed : public DataFeed {
   virtual void SetParseContent(bool parse_content);
   virtual void SetParseLogKey(bool parse_logkey);
   virtual void SetEnablePvMerge(bool enable_pv_merge);
+  virtual void SetEnableDupPv(bool enable_dup_pv);
   virtual void SetCurrentPhase(int current_phase);
   virtual void LoadIntoMemory();
 
@@ -355,6 +362,7 @@ class InMemoryDataFeed : public DataFeed {
   bool parse_content_;
   bool parse_logkey_;
   bool enable_pv_merge_;
+  bool enable_dup_pv_;
   int current_phase_{-1};  // only for untest
   std::ifstream file_;
   std::shared_ptr<FILE> fp_;
@@ -740,7 +748,10 @@ class PaddleBoxDataFeed : public MultiSlotInMemoryDataFeed {
   virtual int GetCurrentPhase();
   virtual void GetRankOffset(const std::vector<PvInstance>& pv_vec,
                              int ins_number);
+  virtual void GetDupPvMask(const std::vector<PvInstance>& pv_vec,
+                             int ins_number);
   std::string rank_offset_name_;
+  std::string dup_pv_mask_name_;
   int pv_batch_size_;
   std::vector<PvInstance> pv_vec_;
 };
@@ -819,6 +830,7 @@ inline SlotRecord make_slotrecord() { return new SlotRecordObject(); }
 
 struct SlotPvInstanceObject {
   std::vector<SlotRecord> ads;
+  int ad_idx = -1;
   ~SlotPvInstanceObject() {
     ads.clear();
     ads.shrink_to_fit();
@@ -1112,6 +1124,7 @@ struct BatchCPUValue {
   HostBuffer<int> h_rank;
   HostBuffer<int> h_cmatch;
   HostBuffer<int> h_ad_offset;
+  HostBuffer<int> h_ad_idx;
 };
 
 struct BatchGPUValue {
@@ -1126,6 +1139,7 @@ struct BatchGPUValue {
   CudaBuffer<int> d_rank;
   CudaBuffer<int> d_cmatch;
   CudaBuffer<int> d_ad_offset;
+  CudaBuffer<int> d_ad_idx;
 };
 
 class SlotPaddleBoxDataFeed;
@@ -1325,6 +1339,9 @@ class SlotPaddleBoxDataFeed : public DataFeed {
   virtual void SetEnablePvMerge(bool enable_pv_merge) {
     enable_pv_merge_ = enable_pv_merge;
   }
+  virtual void SetEnableDupPv(bool enable_dup_pv) {
+    enable_dup_pv_ = enable_dup_pv;
+  }
   virtual void SetCurrentPhase(int current_phase) {
     current_phase_ = current_phase;
   }
@@ -1364,7 +1381,9 @@ class SlotPaddleBoxDataFeed : public DataFeed {
   void PutToFeedSlotVec(const SlotRecord* recs, int num);
   void BuildSlotBatchGPU(const int ins_num);
   void GetRankOffsetGPU(const int pv_num, const int ins_num);
+  void GetDupPvMaskGPU(const int pv_num, const int ins_num);
   void GetRankOffset(const SlotPvInstance* pv_vec, int pv_num, int ins_number);
+  void GetDupPvMask(const SlotPvInstance* pv_vec, int pv_num, int ins_number);
   bool ParseOneInstance(const std::string& line, SlotRecord* rec);
 
  private:
@@ -1372,6 +1391,8 @@ class SlotPaddleBoxDataFeed : public DataFeed {
   void CopyRankOffset(int* dest, const int ins_num, const int pv_num,
                       const int max_rank, const int* ranks, const int* cmatchs,
                       const int* ad_offsets, const int cols);
+  void CopyDupPvMask(int *dup_pv_mask, const int ins_num, const int pv_num,
+                     const int *ad_idx, const int *pv_offset);
   void FillSlotValueOffset(const int ins_num, const int used_slot_num,
                            size_t* slot_value_offsets,
                            const int* uint64_offsets,
@@ -1394,6 +1415,7 @@ class SlotPaddleBoxDataFeed : public DataFeed {
   bool parse_content_ = false;
   bool parse_logkey_ = false;
   bool enable_pv_merge_ = false;
+  bool enable_dup_pv_ = false;
   int current_phase_{-1};  // only for untest
   std::shared_ptr<FILE> fp_ = nullptr;
   ChannelObject<SlotRecord>* input_channel_ = nullptr;
@@ -1405,6 +1427,7 @@ class SlotPaddleBoxDataFeed : public DataFeed {
   size_t float_total_dims_size_ = 0;
 
   std::string rank_offset_name_;
+  std::string dup_pv_mask_name_;
   int pv_batch_size_ = 0;
   int use_slot_size_ = 0;
   int float_use_slot_size_ = 0;

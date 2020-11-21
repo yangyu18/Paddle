@@ -270,5 +270,28 @@ void SlotPaddleBoxDataFeed::CopyRankOffset(int *dest, const int ins_num,
   cudaStreamSynchronize(stream);
 }
 
+__global__ void CopyDupPvMaskKernel(int *dup_pv_mask, const int pv_num,
+                                    const int *ad_idx, const int *pv_offset) {
+  CUDA_KERNEL_LOOP(pv_idx, pv_num) {
+    int pv_ad_num = pv_offset[pv_idx + 1] - pv_offset[pv_idx];
+    int pv_start_idx = pv_offset[pv_idx];
+    int pv_ad_idx = ad_idx[pv_idx];
+
+    dup_pv_mask[pv_start_idx + pv_ad_idx] = 1;
+  }
+}
+
+void SlotPaddleBoxDataFeed::CopyDupPvMask(int *dup_pv_mask, const int ins_num,
+        const int pv_num, const int *ad_idx, const int *pv_offset) {
+  auto stream = dynamic_cast<platform::CUDADeviceContext *>(
+                    platform::DeviceContextPool::Instance().Get(
+                        boost::get<platform::CUDAPlace>(this->place_)))
+                    ->stream();
+  cudaMemsetAsync(dup_pv_mask, 0, sizeof(int) * ins_num, stream);
+  CopyDupPvMaskKernel<<<GET_BLOCKS(pv_num), CUDA_NUM_THREADS, 0, stream>>>(
+      dup_pv_mask, pv_num, ad_idx, pv_offset);
+  cudaStreamSynchronize(stream);
+}
+
 }  // namespace framework
 }  // namespace paddle

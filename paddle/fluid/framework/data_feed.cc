@@ -385,6 +385,7 @@ InMemoryDataFeed<T>::InMemoryDataFeed() {
   this->parse_content_ = false;
   this->parse_logkey_ = false;
   this->enable_pv_merge_ = false;
+  this->enable_dup_pv_ = false;
   this->current_phase_ = 1;  // 1:join ;0:update
   this->input_channel_ = nullptr;
   this->output_channel_ = nullptr;
@@ -519,6 +520,11 @@ void InMemoryDataFeed<T>::SetParseLogKey(bool parse_logkey) {
 template <typename T>
 void InMemoryDataFeed<T>::SetEnablePvMerge(bool enable_pv_merge) {
   enable_pv_merge_ = enable_pv_merge;
+}
+
+template <typename T>
+void InMemoryDataFeed<T>::SetEnableDupPv(bool enable_dup_pv) {
+  enable_dup_pv_ = enable_dup_pv;
 }
 
 template <typename T>
@@ -1704,6 +1710,7 @@ int PaddleBoxDataFeed::Next() {
 void PaddleBoxDataFeed::Init(const DataFeedDesc& data_feed_desc) {
   MultiSlotInMemoryDataFeed::Init(data_feed_desc);
   rank_offset_name_ = data_feed_desc.rank_offset();
+  dup_pv_mask_name_ = data_feed_desc.dup_pv_mask();
   pv_batch_size_ = data_feed_desc.pv_batch_size();
 }
 
@@ -1757,12 +1764,35 @@ void PaddleBoxDataFeed::GetRankOffset(const std::vector<PvInstance>& pv_vec,
   CopyToFeedTensor(tensor_ptr, rank_offset, row * col * sizeof(int));
 }
 
+void PaddleBoxDataFeed::GetDupPvMask(const std::vector<PvInstance>& pv_vec,
+                                      int ins_number) {
+  int row = ins_number;
+  int col = 1;
+  std::vector<int> dup_pv_mask_mat(row * col, 0);
+  int ins_idx = 0;
+  int pv_num = pv_vec.size();
+  for (int pv_idx = 0; pv_idx < pv_num; pv_idx++) {
+    auto pv_ins = pv_vec[pv_idx];
+    int ad_idx = pv_ins->ad_idx;
+    dup_pv_mask_mat[ins_idx + ad_idx] = 1;
+    ins_idx += pv_ins->ads.size();
+  }
+  CHECK(ins_idx == ins_number);
+
+  int* dup_pv_mask = dup_pv_mask_mat.data();
+  int* tensor_ptr = dup_pv_mask_->mutable_data<int>({row, col}, this->place_);
+  CopyToFeedTensor(tensor_ptr, dup_pv_mask, row * col * sizeof(int));
+}
+
 void PaddleBoxDataFeed::AssignFeedVar(const Scope& scope) {
   MultiSlotInMemoryDataFeed::AssignFeedVar(scope);
   // set rank offset memory
   int phase = GetCurrentPhase();  // join: 1, update: 0
   if (enable_pv_merge_ && phase == 1) {
     rank_offset_ = scope.FindVar(rank_offset_name_)->GetMutable<LoDTensor>();
+    if (enable_dup_pv_ && phase == 1) {
+        dup_pv_mask_ = scope.FindVar(dup_pv_mask_name_)->GetMutable<LoDTensor>();
+    }
   }
 }
 
@@ -1777,6 +1807,7 @@ void PaddleBoxDataFeed::PutToFeedVec(const std::vector<PvInstance>& pv_vec) {
     }
   }
   GetRankOffset(pv_vec, ins_number);
+  GetDupPvMask(pv_vec, ins_number);
   PutToFeedVec(ins_vec);
 #endif
 }
@@ -2052,9 +2083,11 @@ void SlotPaddleBoxDataFeed::Init(const DataFeedDesc& data_feed_desc) {
   input_type_ = data_feed_desc.input_type();
 
   rank_offset_name_ = data_feed_desc.rank_offset();
+  dup_pv_mask_name_ = data_feed_desc.dup_pv_mask();
   pv_batch_size_ = data_feed_desc.pv_batch_size();
-
   // fprintf(stdout, "rank_offset_name: [%s]\n", rank_offset_name_.c_str());
+  // fprintf(stdout, "dup_pv_mask_name: [%s]\n", dup_pv_mask_name_.c_str());
+
   size_t pos = pipe_command_.find(".so");
   if (pos != std::string::npos) {
     pos = pipe_command_.rfind('|');
@@ -2153,6 +2186,9 @@ void SlotPaddleBoxDataFeed::AssignFeedVar(const Scope& scope) {
   int phase = GetCurrentPhase();  // join: 1, update: 0
   if (enable_pv_merge_ && phase == 1) {
     rank_offset_ = scope.FindVar(rank_offset_name_)->GetMutable<LoDTensor>();
+    if (enable_dup_pv_ && phase == 1) {
+        dup_pv_mask_ = scope.FindVar(dup_pv_mask_name_)->GetMutable<LoDTensor>();
+    }
   }
 }
 void SlotPaddleBoxDataFeed::PutToFeedPvVec(const SlotPvInstance* pvs, int num) {
@@ -2163,6 +2199,7 @@ void SlotPaddleBoxDataFeed::PutToFeedPvVec(const SlotPvInstance* pvs, int num) {
   int ins_num = pack_->ins_num();
   int pv_num = pack_->pv_num();
   GetRankOffsetGPU(pv_num, ins_num);
+  GetDupPvMaskGPU(pv_num, ins_num);
   BuildSlotBatchGPU(ins_num);
 #else
   int ins_number = 0;
@@ -2175,6 +2212,7 @@ void SlotPaddleBoxDataFeed::PutToFeedPvVec(const SlotPvInstance* pvs, int num) {
     }
   }
   GetRankOffset(pvs, num, ins_number);
+  GetDupPvMask(pvs, num, ins_number);
   PutToFeedSlotVec(&ins_vec[0], ins_number);
 #endif
 }
@@ -2518,6 +2556,34 @@ void SlotPaddleBoxDataFeed::GetRankOffset(const SlotPvInstance* pv_vec,
   int* rank_offset = rank_offset_mat.data();
   int* tensor_ptr = rank_offset_->mutable_data<int>({row, col}, this->place_);
   CopyToFeedTensor(tensor_ptr, rank_offset, row * col * sizeof(int));
+}
+
+void SlotPaddleBoxDataFeed::GetDupPvMaskGPU(const int pv_num,
+                                             const int ins_num) {
+#if defined(PADDLE_WITH_CUDA) && defined(_LINUX)
+  auto& value = pack_->value();
+  int* tensor_ptr =
+      dup_pv_mask_->mutable_data<int>({ins_num, 1}, this->place_);
+  CopyDupPvMask(tensor_ptr, ins_num, pv_num,
+                 (const int*)value.d_ad_idx.data(),
+                 (const int*)value.d_ad_offset.data());
+#endif
+}
+void SlotPaddleBoxDataFeed::GetDupPvMask(const SlotPvInstance* pv_vec,
+                                          int pv_num, int ins_number) {
+  std::vector<int> dup_pv_mask_mat(ins_number, 0);
+  int ins_idx = 0;
+  for (int pv_idx = 0; pv_idx < pv_num; pv_idx++) {
+    auto pv_ins = pv_vec[pv_idx];
+    int ad_idx = pv_ins->ad_idx;
+    dup_pv_mask_mat[ins_idx + ad_idx] = 1;
+    ins_idx += pv_ins->ads.size();
+  }
+  CHECK(ins_idx == ins_number);
+
+  int* dup_pv_mask = dup_pv_mask_mat.data();
+  int* tensor_ptr = dup_pv_mask_->mutable_data<int>({ins_number, 1}, this->place_);
+  CopyToFeedTensor(tensor_ptr, dup_pv_mask, ins_number * sizeof(int));
 }
 
 class SlotInsParserMgr {
@@ -3254,6 +3320,7 @@ void MiniBatchGpuPack::reset(const paddle::platform::Place& place) {
 
 void MiniBatchGpuPack::pack_pvinstance(const SlotPvInstance* pv_ins, int num) {
   pv_num_ = num;
+  buf_.h_ad_idx.resize(num + 1);
   buf_.h_ad_offset.resize(num + 1);
   buf_.h_ad_offset[0] = 0;
   size_t ins_number = 0;
@@ -3266,6 +3333,7 @@ void MiniBatchGpuPack::pack_pvinstance(const SlotPvInstance* pv_ins, int num) {
       ins_vec_.push_back(ins);
     }
     buf_.h_ad_offset[i + 1] = ins_number;
+    buf_.h_ad_idx[i] = pv->ad_idx;
   }
   buf_.h_rank.resize(ins_number);
   buf_.h_cmatch.resize(ins_number);
@@ -3463,6 +3531,7 @@ void MiniBatchGpuPack::transfer_to_gpu(void) {
   trans_timer_.Resume();
   if (enable_pv_) {
     copy_host2device(&value_.d_ad_offset, buf_.h_ad_offset);
+    copy_host2device(&value_.d_ad_idx, buf_.h_ad_idx);
     copy_host2device(&value_.d_rank, buf_.h_rank);
     copy_host2device(&value_.d_cmatch, buf_.h_cmatch);
   }

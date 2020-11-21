@@ -362,7 +362,9 @@ class InMemoryDataset(DatasetBase):
         self.parse_content = False
         self.parse_logkey = False
         self.merge_by_sid = True
+        self.merge_by_cmatch_sid = False
         self.enable_pv_merge = False
+        self.enable_dup_pv = False
         self.merge_by_lineid = False
         self.fleet_send_sleep_seconds = None
 
@@ -387,7 +389,9 @@ class InMemoryDataset(DatasetBase):
         self.dataset.set_parse_content(self.parse_content)
         self.dataset.set_parse_logkey(self.parse_logkey)
         self.dataset.set_merge_by_sid(self.merge_by_sid)
+        self.dataset.set_merge_by_cmatch_sid(self.merge_by_cmatch_sid)
         self.dataset.set_enable_pv_merge(self.enable_pv_merge)
+        self.dataset.set_enable_dup_pv(self.enable_dup_pv)
         self.dataset.set_data_feed_desc(self.desc())
         self.dataset.create_channel()
         self.dataset.create_readers()
@@ -487,6 +491,28 @@ class InMemoryDataset(DatasetBase):
 
         """
         self.merge_by_sid = merge_by_sid
+        if self.merge_by_cmatch_sid:
+            self.set_merge_by_cmatch_sid(False)
+
+
+    def set_merge_by_cmatch_sid(self, merge_by_cmatch_sid):
+        """
+        Set if Dataset need to merge sid. If not, one ins means one Pv.
+
+        Args:
+            merge_by_cmatch_sid(bool): if merge sid or not
+
+        Examples:
+            .. code-block:: python
+
+              import paddle.fluid as fluid
+              dataset = fluid.DatasetFactory().create_dataset("InMemoryDataset")
+              dataset.set_merge_by_cmatch_sid(True)
+
+        """
+        self.merge_by_cmatch_sid = merge_by_cmatch_sid
+        if self.merge_by_sid:
+            self.set_merge_by_sid(False)
 
     def set_enable_pv_merge(self, enable_pv_merge):
         """
@@ -504,6 +530,23 @@ class InMemoryDataset(DatasetBase):
 
         """
         self.enable_pv_merge = enable_pv_merge
+
+    def set_enable_dup_pv(self, enable_dup_pv):
+        """
+        Set if Dataset need to dup pv.
+
+        Args:
+            enable_dup_pv(bool): if enable_dup_pv or not
+
+        Examples:
+            .. code-block:: python
+
+              import paddle.fluid as fluid
+              dataset = fluid.DatasetFactory().create_dataset("InMemoryDataset")
+              dataset.set_enable_dup_pv(True)
+
+        """
+        self.enable_dup_pv = enable_dup_pv
 
     def preprocess_instance(self):
         """
