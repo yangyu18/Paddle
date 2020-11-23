@@ -2572,11 +2572,14 @@ void SlotPaddleBoxDataFeed::GetDupPvMaskGPU(const int pv_num,
 void SlotPaddleBoxDataFeed::GetDupPvMask(const SlotPvInstance* pv_vec,
                                           int pv_num, int ins_number) {
   std::vector<int> dup_pv_mask_mat(ins_number, 0);
+  dup_pv_mask_mat.shrink_to_fit();
   int ins_idx = 0;
   for (int pv_idx = 0; pv_idx < pv_num; pv_idx++) {
     auto pv_ins = pv_vec[pv_idx];
     int ad_idx = pv_ins->ad_idx;
-    dup_pv_mask_mat[ins_idx + ad_idx] = 1;
+    if (ad_idx >= 0) {
+      dup_pv_mask_mat[ins_idx + ad_idx] = 1;
+    }
     ins_idx += pv_ins->ads.size();
   }
   CHECK(ins_idx == ins_number);
@@ -3320,7 +3323,7 @@ void MiniBatchGpuPack::reset(const paddle::platform::Place& place) {
 
 void MiniBatchGpuPack::pack_pvinstance(const SlotPvInstance* pv_ins, int num) {
   pv_num_ = num;
-  buf_.h_ad_idx.resize(num + 1);
+  buf_.h_ad_idx.resize(pv_num_);
   buf_.h_ad_offset.resize(num + 1);
   buf_.h_ad_offset[0] = 0;
   size_t ins_number = 0;

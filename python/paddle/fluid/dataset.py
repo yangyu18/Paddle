@@ -361,11 +361,11 @@ class InMemoryDataset(DatasetBase):
         self.parse_ins_id = False
         self.parse_content = False
         self.parse_logkey = False
+        self.enable_pv_merge = False
+        self.merge_by_lineid = False
         self.merge_by_sid = True
         self.merge_by_cmatch_sid = False
-        self.enable_pv_merge = False
         self.enable_dup_pv = False
-        self.merge_by_lineid = False
         self.fleet_send_sleep_seconds = None
 
     def set_feed_type(self, data_feed_type):
@@ -388,9 +388,9 @@ class InMemoryDataset(DatasetBase):
         self.dataset.set_parse_ins_id(self.parse_ins_id)
         self.dataset.set_parse_content(self.parse_content)
         self.dataset.set_parse_logkey(self.parse_logkey)
+        self.dataset.set_enable_pv_merge(self.enable_pv_merge)
         self.dataset.set_merge_by_sid(self.merge_by_sid)
         self.dataset.set_merge_by_cmatch_sid(self.merge_by_cmatch_sid)
-        self.dataset.set_enable_pv_merge(self.enable_pv_merge)
         self.dataset.set_enable_dup_pv(self.enable_dup_pv)
         self.dataset.set_data_feed_desc(self.desc())
         self.dataset.create_channel()
@@ -1192,9 +1192,11 @@ class PadBoxSlotDataset(BoxPSDataset):
         self.parse_ins_id = False
         self.parse_content = False
         self.parse_logkey = False
-        self.merge_by_sid = True
         self.enable_pv_merge = False
         self.merge_by_lineid = False
+        self.merge_by_sid = True
+        self.merge_by_cmatch_sid = False
+        self.enable_dup_pv = False
         self.fleet_send_sleep_seconds = None
 
     def load_into_memory(self):
