@@ -72,6 +72,8 @@ class Dataset {
   virtual bool EnablePvMerge() = 0;
   virtual void SetEnableDupPv(bool enable_dup_pv) = 0;
   virtual bool EnableDupPv() = 0;
+  virtual void SetEnableUpdatePv(bool enable_update_pv) = 0;
+  virtual bool EnableUpdatePv() = 0;
   virtual void SetMergeBySid(bool is_merge) = 0;
   virtual void SetMergeByCmatchSid(bool is_merge) = 0;
   // set merge by ins id
@@ -184,6 +186,7 @@ class DatasetImpl : public Dataset {
   virtual void SetParseLogKey(bool parse_logkey);
   virtual void SetEnablePvMerge(bool enable_pv_merge);
   virtual void SetEnableDupPv(bool enable_dup_pv);
+  virtual void SetEnableUpdatePv(bool enable_update_pv);
   virtual void SetMergeBySid(bool is_merge);
   virtual void SetMergeByCmatchSid(bool is_merge);
 
@@ -208,6 +211,7 @@ class DatasetImpl : public Dataset {
   virtual int GetChannelNum() { return channel_num_; }
   virtual bool EnablePvMerge() { return enable_pv_merge_; }
   virtual bool EnableDupPv() { return enable_dup_pv_; }
+  virtual bool EnableUpdatePv() { return enable_update_pv_; }
   virtual std::vector<paddle::framework::DataFeed*> GetReaders();
   virtual void CreateChannel();
   virtual void RegisterClientToClientMsgHandler();
@@ -290,6 +294,7 @@ class DatasetImpl : public Dataset {
   bool merge_by_cmatch_sid_;
   bool enable_pv_merge_;  // True means to merge pv
   bool enable_dup_pv_;
+  bool enable_update_pv_;
   int current_phase_;     // 1 join, 0 update
   size_t merge_size_;
   bool slots_shuffle_fea_eval_ = false;
