@@ -55,6 +55,7 @@ DatasetImpl<T>::DatasetImpl() {
   merge_by_cmatch_sid_ = false;
   enable_pv_merge_ = false;
   enable_dup_pv_ = false;
+  enable_update_pv_ = false;
   merge_size_ = 2;
   parse_ins_id_ = false;
   parse_content_ = false;
@@ -172,7 +173,10 @@ template <typename T>
 void DatasetImpl<T>::SetEnableDupPv(bool enable_dup_pv) {
   enable_dup_pv_ = enable_dup_pv;
 }
-
+template <typename T>
+void DatasetImpl<T>::SetEnableUpdatePv(bool enable_update_pv) {
+  enable_update_pv_ = enable_update_pv;
+}
 template <typename T>
 void DatasetImpl<T>::SetGenerateUniqueFeasign(bool gen_uni_feasigns) {
   gen_uni_feasigns_ = gen_uni_feasigns;
@@ -676,6 +680,7 @@ void DatasetImpl<T>::CreateReaders() {
     readers_[i]->SetParseLogKey(parse_logkey_);
     readers_[i]->SetEnablePvMerge(enable_pv_merge_);
     readers_[i]->SetEnableDupPv(enable_dup_pv_);
+    readers_[i]->SetEnableUpdatePv(enable_update_pv_);
     // Notice: it is only valid for untest of test_paddlebox_datafeed.
     // In fact, it does not affect the train process when paddle is
     // complied with Box_Ps.
@@ -753,6 +758,7 @@ void DatasetImpl<T>::CreatePreLoadReaders() {
     preload_readers_[i]->SetParseLogKey(parse_logkey_);
     preload_readers_[i]->SetEnablePvMerge(enable_pv_merge_);
     preload_readers_[i]->SetEnableDupPv(enable_dup_pv_);
+    preload_readers_[i]->SetEnableUpdatePv(enable_update_pv_);
     preload_readers_[i]->SetInputChannel(input_channel_.get());
     preload_readers_[i]->SetOutputChannel(nullptr);
     preload_readers_[i]->SetConsumeChannel(nullptr);

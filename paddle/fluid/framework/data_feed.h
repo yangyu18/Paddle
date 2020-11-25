@@ -193,6 +193,7 @@ class DataFeed {
   virtual void SetParseLogKey(bool parse_logkey) {}
   virtual void SetEnablePvMerge(bool enable_pv_merge) {}
   virtual void SetEnableDupPv(bool enable_dup_pv) {}
+  virtual void SetEnableUpdatePv(bool enable_update_pv) {}
   virtual void SetCurrentPhase(int current_phase) {}
   virtual void SetFileListMutex(std::mutex* mutex) {
     mutex_for_pick_file_ = mutex;
@@ -346,6 +347,7 @@ class InMemoryDataFeed : public DataFeed {
   virtual void SetParseLogKey(bool parse_logkey);
   virtual void SetEnablePvMerge(bool enable_pv_merge);
   virtual void SetEnableDupPv(bool enable_dup_pv);
+  virtual void SetEnableUpdatePv(bool enable_update_pv);
   virtual void SetCurrentPhase(int current_phase);
   virtual void LoadIntoMemory();
 
@@ -363,6 +365,7 @@ class InMemoryDataFeed : public DataFeed {
   bool parse_logkey_;
   bool enable_pv_merge_;
   bool enable_dup_pv_;
+  bool enable_update_pv_;
   int current_phase_{-1};  // only for untest
   std::ifstream file_;
   std::shared_ptr<FILE> fp_;
@@ -1342,6 +1345,9 @@ class SlotPaddleBoxDataFeed : public DataFeed {
   virtual void SetEnableDupPv(bool enable_dup_pv) {
     enable_dup_pv_ = enable_dup_pv;
   }
+  virtual void SetEnableUpdatePv(bool enable_update_pv) {
+    enable_update_pv_ = enable_update_pv;
+  }
   virtual void SetCurrentPhase(int current_phase) {
     current_phase_ = current_phase;
   }
@@ -1416,6 +1422,7 @@ class SlotPaddleBoxDataFeed : public DataFeed {
   bool parse_logkey_ = false;
   bool enable_pv_merge_ = false;
   bool enable_dup_pv_ = false;
+  bool enable_update_pv_ = false;
   int current_phase_{-1};  // only for untest
   std::shared_ptr<FILE> fp_ = nullptr;
   ChannelObject<SlotRecord>* input_channel_ = nullptr;

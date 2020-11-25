@@ -386,6 +386,7 @@ InMemoryDataFeed<T>::InMemoryDataFeed() {
   this->parse_logkey_ = false;
   this->enable_pv_merge_ = false;
   this->enable_dup_pv_ = false;
+  this->enable_update_pv_ = false;
   this->current_phase_ = 1;  // 1:join ;0:update
   this->input_channel_ = nullptr;
   this->output_channel_ = nullptr;
@@ -525,6 +526,11 @@ void InMemoryDataFeed<T>::SetEnablePvMerge(bool enable_pv_merge) {
 template <typename T>
 void InMemoryDataFeed<T>::SetEnableDupPv(bool enable_dup_pv) {
   enable_dup_pv_ = enable_dup_pv;
+}
+
+template <typename T>
+void InMemoryDataFeed<T>::SetEnableUpdatePv(bool enable_update_pv) {
+  enable_update_pv_ = enable_update_pv;
 }
 
 template <typename T>
@@ -1604,7 +1610,7 @@ bool PaddleBoxDataFeed::Start() {
 #ifdef _LINUX
   int phase = GetCurrentPhase();  // join: 1, update: 0
   this->CheckSetFileList();
-  if (enable_pv_merge_ && phase == 1) {
+  if (enable_pv_merge_ && (phase == 1 || (phase == 2 && enable_update_pv_))) {
     // join phase : input_pv_channel to output_pv_channel
     if (output_pv_channel_->Size() == 0 && input_pv_channel_->Size() != 0) {
       std::vector<PvInstance> data;
@@ -1635,7 +1641,7 @@ int PaddleBoxDataFeed::Next() {
 #ifdef _LINUX
   int phase = GetCurrentPhase();  // join: 1, update: 0
   this->CheckStart();
-  if (enable_pv_merge_ && phase == 1) {
+  if (enable_pv_merge_ && (phase == 1 || (phase == 2 && enable_update_pv_))) {
     // join phase : output_pv_channel to consume_pv_channel
     CHECK(output_pv_channel_ != nullptr);
     CHECK(consume_pv_channel_ != nullptr);
@@ -1769,6 +1775,7 @@ void PaddleBoxDataFeed::GetDupPvMask(const std::vector<PvInstance>& pv_vec,
   int row = ins_number;
   int col = 1;
   std::vector<int> dup_pv_mask_mat(row * col, 0);
+  dup_pv_mask_mat.shrink_to_fit();
   int ins_idx = 0;
   int pv_num = pv_vec.size();
   for (int pv_idx = 0; pv_idx < pv_num; pv_idx++) {
@@ -1788,9 +1795,9 @@ void PaddleBoxDataFeed::AssignFeedVar(const Scope& scope) {
   MultiSlotInMemoryDataFeed::AssignFeedVar(scope);
   // set rank offset memory
   int phase = GetCurrentPhase();  // join: 1, update: 0
-  if (enable_pv_merge_ && phase == 1) {
+  if (enable_pv_merge_ && (phase == 1 || (phase == 2 && enable_update_pv_))) {
     rank_offset_ = scope.FindVar(rank_offset_name_)->GetMutable<LoDTensor>();
-    if (enable_dup_pv_ && phase == 1) {
+    if (enable_dup_pv_ && (phase == 1 || (phase == 2 && enable_update_pv_))) {
         dup_pv_mask_ = scope.FindVar(dup_pv_mask_name_)->GetMutable<LoDTensor>();
     }
   }
@@ -2083,10 +2090,12 @@ void SlotPaddleBoxDataFeed::Init(const DataFeedDesc& data_feed_desc) {
   input_type_ = data_feed_desc.input_type();
 
   rank_offset_name_ = data_feed_desc.rank_offset();
-  dup_pv_mask_name_ = data_feed_desc.dup_pv_mask();
   pv_batch_size_ = data_feed_desc.pv_batch_size();
   // fprintf(stdout, "rank_offset_name: [%s]\n", rank_offset_name_.c_str());
-  // fprintf(stdout, "dup_pv_mask_name: [%s]\n", dup_pv_mask_name_.c_str());
+  if (enable_dup_pv_) {
+    dup_pv_mask_name_ = data_feed_desc.dup_pv_mask();
+    fprintf(stdout, "dup_pv_mask_name: [%s]\n", dup_pv_mask_name_.c_str());
+  }
 
   size_t pos = pipe_command_.find(".so");
   if (pos != std::string::npos) {
@@ -2138,7 +2147,7 @@ int SlotPaddleBoxDataFeed::Next() {
     return 0;
   }
   auto& batch = batch_offsets_[offset_index_++];
-  if (enable_pv_merge_ && phase == 1) {
+  if (enable_pv_merge_ && (phase == 1 || (phase == 2 && enable_update_pv_))) {
     // join phase : output_pv_channel to consume_pv_channel
     this->batch_size_ = batch.second;
     if (this->batch_size_ != 0) {
@@ -2184,9 +2193,9 @@ void SlotPaddleBoxDataFeed::AssignFeedVar(const Scope& scope) {
   }
   // set rank offset memory
   int phase = GetCurrentPhase();  // join: 1, update: 0
-  if (enable_pv_merge_ && phase == 1) {
+  if (enable_pv_merge_ && (phase == 1 || (phase == 2 && enable_update_pv_))) {
     rank_offset_ = scope.FindVar(rank_offset_name_)->GetMutable<LoDTensor>();
-    if (enable_dup_pv_ && phase == 1) {
+    if (enable_dup_pv_ && (phase == 1 || (phase == 2 && enable_update_pv_))) {
         dup_pv_mask_ = scope.FindVar(dup_pv_mask_name_)->GetMutable<LoDTensor>();
     }
   }
@@ -2199,7 +2208,9 @@ void SlotPaddleBoxDataFeed::PutToFeedPvVec(const SlotPvInstance* pvs, int num) {
   int ins_num = pack_->ins_num();
   int pv_num = pack_->pv_num();
   GetRankOffsetGPU(pv_num, ins_num);
-  GetDupPvMaskGPU(pv_num, ins_num);
+  if (enable_dup_pv_) {
+    GetDupPvMaskGPU(pv_num, ins_num);
+  }
   BuildSlotBatchGPU(ins_num);
 #else
   int ins_number = 0;
@@ -2212,7 +2223,9 @@ void SlotPaddleBoxDataFeed::PutToFeedPvVec(const SlotPvInstance* pvs, int num) {
     }
   }
   GetRankOffset(pvs, num, ins_number);
-  GetDupPvMask(pvs, num, ins_number);
+  if (enable_dup_pv_) {
+    GetDupPvMask(pvs, num, ins_number);
+  }
   PutToFeedSlotVec(&ins_vec[0], ins_number);
 #endif
 }

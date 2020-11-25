@@ -273,7 +273,6 @@ void SlotPaddleBoxDataFeed::CopyRankOffset(int *dest, const int ins_num,
 __global__ void CopyDupPvMaskKernel(int *dup_pv_mask, const int pv_num,
                                     const int *ad_idx, const int *pv_offset) {
   CUDA_KERNEL_LOOP(pv_idx, pv_num) {
-    int pv_ad_num = pv_offset[pv_idx + 1] - pv_offset[pv_idx];
     int pv_start_idx = pv_offset[pv_idx];
     int pv_ad_idx = ad_idx[pv_idx];
 
