@@ -1610,8 +1610,8 @@ bool PaddleBoxDataFeed::Start() {
 #ifdef _LINUX
   int phase = GetCurrentPhase();  // join: 1, update: 0
   this->CheckSetFileList();
-  if (enable_pv_merge_ && (phase == 1 || (phase == 2 && enable_update_pv_))) {
-    // join phase : input_pv_channel to output_pv_channel
+  if (enable_pv_merge_ && (phase == 1 || (phase == 0 && enable_update_pv_))) {
+    // input_pv_channel to output_pv_channel
     if (output_pv_channel_->Size() == 0 && input_pv_channel_->Size() != 0) {
       std::vector<PvInstance> data;
       input_pv_channel_->Read(data);
@@ -1641,8 +1641,8 @@ int PaddleBoxDataFeed::Next() {
 #ifdef _LINUX
   int phase = GetCurrentPhase();  // join: 1, update: 0
   this->CheckStart();
-  if (enable_pv_merge_ && (phase == 1 || (phase == 2 && enable_update_pv_))) {
-    // join phase : output_pv_channel to consume_pv_channel
+  if (enable_pv_merge_ && (phase == 1 || (phase == 0 && enable_update_pv_))) {
+    // output_pv_channel to consume_pv_channel
     CHECK(output_pv_channel_ != nullptr);
     CHECK(consume_pv_channel_ != nullptr);
     VLOG(3) << "output_pv_channel_ size=" << output_pv_channel_->Size()
@@ -1795,9 +1795,9 @@ void PaddleBoxDataFeed::AssignFeedVar(const Scope& scope) {
   MultiSlotInMemoryDataFeed::AssignFeedVar(scope);
   // set rank offset memory
   int phase = GetCurrentPhase();  // join: 1, update: 0
-  if (enable_pv_merge_ && (phase == 1 || (phase == 2 && enable_update_pv_))) {
+  if (enable_pv_merge_ && (phase == 1 || (phase == 0 && enable_update_pv_))) {
     rank_offset_ = scope.FindVar(rank_offset_name_)->GetMutable<LoDTensor>();
-    if (enable_dup_pv_ && (phase == 1 || (phase == 2 && enable_update_pv_))) {
+    if (enable_dup_pv_ && (phase == 1 || (phase == 0 && enable_update_pv_))) {
         dup_pv_mask_ = scope.FindVar(dup_pv_mask_name_)->GetMutable<LoDTensor>();
     }
   }
@@ -2092,10 +2092,9 @@ void SlotPaddleBoxDataFeed::Init(const DataFeedDesc& data_feed_desc) {
   rank_offset_name_ = data_feed_desc.rank_offset();
   pv_batch_size_ = data_feed_desc.pv_batch_size();
   // fprintf(stdout, "rank_offset_name: [%s]\n", rank_offset_name_.c_str());
-  if (enable_dup_pv_) {
-    dup_pv_mask_name_ = data_feed_desc.dup_pv_mask();
-    fprintf(stdout, "dup_pv_mask_name: [%s]\n", dup_pv_mask_name_.c_str());
-  }
+
+  dup_pv_mask_name_ = data_feed_desc.dup_pv_mask();
+  // fprintf(stdout, "dup_pv_mask_name: [%s]\n", dup_pv_mask_name_.c_str());
 
   size_t pos = pipe_command_.find(".so");
   if (pos != std::string::npos) {
@@ -2147,8 +2146,8 @@ int SlotPaddleBoxDataFeed::Next() {
     return 0;
   }
   auto& batch = batch_offsets_[offset_index_++];
-  if (enable_pv_merge_ && (phase == 1 || (phase == 2 && enable_update_pv_))) {
-    // join phase : output_pv_channel to consume_pv_channel
+  if (enable_pv_merge_ && (phase == 1 || (phase == 0 && enable_update_pv_))) {
+    // output_pv_channel to consume_pv_channel
     this->batch_size_ = batch.second;
     if (this->batch_size_ != 0) {
       batch_timer_.Resume();
@@ -2167,7 +2166,8 @@ int SlotPaddleBoxDataFeed::Next() {
   }
 }
 bool SlotPaddleBoxDataFeed::EnablePvMerge(void) {
-  return (enable_pv_merge_ && GetCurrentPhase() == 1);
+  return (enable_pv_merge_ && (GetCurrentPhase() == 1
+              || (GetCurrentPhase() == 0 && enable_update_pv_)));
 }
 int SlotPaddleBoxDataFeed::GetPackInstance(SlotRecord** ins) {
   if (offset_index_ >= static_cast<int>(batch_offsets_.size())) {
@@ -2193,9 +2193,9 @@ void SlotPaddleBoxDataFeed::AssignFeedVar(const Scope& scope) {
   }
   // set rank offset memory
   int phase = GetCurrentPhase();  // join: 1, update: 0
-  if (enable_pv_merge_ && (phase == 1 || (phase == 2 && enable_update_pv_))) {
+  if (enable_pv_merge_ && (phase == 1 || (phase == 0 && enable_update_pv_))) {
     rank_offset_ = scope.FindVar(rank_offset_name_)->GetMutable<LoDTensor>();
-    if (enable_dup_pv_ && (phase == 1 || (phase == 2 && enable_update_pv_))) {
+    if (enable_dup_pv_ && (phase == 1 || (phase == 0 && enable_update_pv_))) {
         dup_pv_mask_ = scope.FindVar(dup_pv_mask_name_)->GetMutable<LoDTensor>();
     }
   }

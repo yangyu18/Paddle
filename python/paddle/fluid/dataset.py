@@ -510,8 +510,6 @@ class InMemoryDataset(DatasetBase):
 
         """
         self.merge_by_sid = merge_by_sid
-        if self.merge_by_cmatch_sid:
-            self.set_merge_by_cmatch_sid(False)
 
 
     def set_merge_by_cmatch_sid(self, merge_by_cmatch_sid):
@@ -530,8 +528,6 @@ class InMemoryDataset(DatasetBase):
 
         """
         self.merge_by_cmatch_sid = merge_by_cmatch_sid
-        if self.merge_by_sid:
-            self.set_merge_by_sid(False)
 
     def set_enable_pv_merge(self, enable_pv_merge):
         """

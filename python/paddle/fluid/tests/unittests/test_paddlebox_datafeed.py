@@ -140,5 +140,14 @@ class TestDataFeed3(TestDataFeed):
         self.enable_pv_merge = False
 
 
+class TestDataFeed4(TestDataFeed):
+    """  TestBaseCase(Merge PV merge by cmatch and sid)   """
+
+    def setUp(self):
+        self.batch_size = 10
+        self.pv_batch_size = 10
+        self.enable_pv_merge = True
+        self.merge_by_cmatch_sid = True
+
 if __name__ == '__main__':
     unittest.main()
