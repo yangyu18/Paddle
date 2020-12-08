@@ -682,8 +682,6 @@ void DatasetImpl<T>::CreateReaders() {
     readers_[i]->SetEnableDupPv(enable_dup_pv_);
     readers_[i]->SetEnableUpdatePv(enable_update_pv_);
  
-    readers_[i]->SetEnableDupPv(enable_dup_pv_);
-    readers_[i]->SetEnableUpdatePv(enable_update_pv_);
     // Notice: it is only valid for untest of test_paddlebox_datafeed.
     // In fact, it does not affect the train process when paddle is
     // complied with Box_Ps.
