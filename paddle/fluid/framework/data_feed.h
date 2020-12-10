@@ -1397,7 +1397,7 @@ class SlotPaddleBoxDataFeed : public DataFeed {
   void CopyRankOffset(int* dest, const int ins_num, const int pv_num,
                       const int max_rank, const int* ranks, const int* cmatchs,
                       const int* ad_offsets, const int cols);
-  void CopyDupPvMask(int *dup_pv_mask, const int ins_num, const int pv_num,
+  void CopyDupPvMask(int64_t *dup_pv_mask, const int ins_num, const int pv_num,
                      const int *ad_idx, const int *pv_offset);
   void FillSlotValueOffset(const int ins_num, const int used_slot_num,
                            size_t* slot_value_offsets,

@@ -1774,7 +1774,7 @@ void PaddleBoxDataFeed::GetDupPvMask(const std::vector<PvInstance>& pv_vec,
                                       int ins_number) {
   int row = ins_number;
   int col = 1;
-  std::vector<int> dup_pv_mask_mat(row * col, 0);
+  std::vector<int64_t> dup_pv_mask_mat(row * col, 0);
   dup_pv_mask_mat.shrink_to_fit();
   int ins_idx = 0;
   int pv_num = pv_vec.size();
@@ -1786,9 +1786,9 @@ void PaddleBoxDataFeed::GetDupPvMask(const std::vector<PvInstance>& pv_vec,
   }
   CHECK(ins_idx == ins_number);
 
-  int* dup_pv_mask = dup_pv_mask_mat.data();
-  int* tensor_ptr = dup_pv_mask_->mutable_data<int>({row, col}, this->place_);
-  CopyToFeedTensor(tensor_ptr, dup_pv_mask, row * col * sizeof(int));
+  int64_t* dup_pv_mask = dup_pv_mask_mat.data();
+  int64_t* tensor_ptr = dup_pv_mask_->mutable_data<int64_t>({row, col}, this->place_);
+  CopyToFeedTensor(tensor_ptr, dup_pv_mask, row * col * sizeof(int64_t));
 }
 
 void PaddleBoxDataFeed::AssignFeedVar(const Scope& scope) {
@@ -2575,8 +2575,8 @@ void SlotPaddleBoxDataFeed::GetDupPvMaskGPU(const int pv_num,
                                              const int ins_num) {
 #if defined(PADDLE_WITH_CUDA) && defined(_LINUX)
   auto& value = pack_->value();
-  int* tensor_ptr =
-      dup_pv_mask_->mutable_data<int>({ins_num, 1}, this->place_);
+  int64_t* tensor_ptr =
+      dup_pv_mask_->mutable_data<int64_t>({ins_num, 1}, this->place_);
   CopyDupPvMask(tensor_ptr, ins_num, pv_num,
                  (const int*)value.d_ad_idx.data(),
                  (const int*)value.d_ad_offset.data());
@@ -2584,7 +2584,7 @@ void SlotPaddleBoxDataFeed::GetDupPvMaskGPU(const int pv_num,
 }
 void SlotPaddleBoxDataFeed::GetDupPvMask(const SlotPvInstance* pv_vec,
                                           int pv_num, int ins_number) {
-  std::vector<int> dup_pv_mask_mat(ins_number, 0);
+  std::vector<int64_t> dup_pv_mask_mat(ins_number, 0);
   dup_pv_mask_mat.shrink_to_fit();
   int ins_idx = 0;
   for (int pv_idx = 0; pv_idx < pv_num; pv_idx++) {
@@ -2597,9 +2597,9 @@ void SlotPaddleBoxDataFeed::GetDupPvMask(const SlotPvInstance* pv_vec,
   }
   CHECK(ins_idx == ins_number);
 
-  int* dup_pv_mask = dup_pv_mask_mat.data();
-  int* tensor_ptr = dup_pv_mask_->mutable_data<int>({ins_number, 1}, this->place_);
-  CopyToFeedTensor(tensor_ptr, dup_pv_mask, ins_number * sizeof(int));
+  int64_t* dup_pv_mask = dup_pv_mask_mat.data();
+  int64_t* tensor_ptr = dup_pv_mask_->mutable_data<int64_t>({ins_number, 1}, this->place_);
+  CopyToFeedTensor(tensor_ptr, dup_pv_mask, ins_number * sizeof(int64_t));
 }
 
 class SlotInsParserMgr {
