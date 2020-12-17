@@ -277,7 +277,6 @@ void BindDataset(py::module *m) {
            py::call_guard<py::gil_scoped_release>())
       .def("set_enable_pv_merge", &framework::Dataset::SetEnablePvMerge,
            py::call_guard<py::gil_scoped_release>())
-
       .def("set_merge_by_lineid", &framework::Dataset::SetMergeByInsId,
            py::call_guard<py::gil_scoped_release>())
       .def("merge_by_lineid", &framework::Dataset::MergeByInsId,
@@ -309,6 +308,10 @@ void BindDataset(py::module *m) {
            &framework::Dataset::SetFleetSendSleepSeconds,
            py::call_guard<py::gil_scoped_release>())
       .def("enable_pv_merge", &framework::Dataset::EnablePvMerge,
+           py::call_guard<py::gil_scoped_release>())
+      .def("set_pv_slots", &framework::Dataset::SetPvSlots,
+           py::call_guard<py::gil_scoped_release>())
+      .def("get_pv_slots", &framework::Dataset::GetPvSlots,
            py::call_guard<py::gil_scoped_release>());
 
   py::class_<IterableDatasetWrapper>(*m, "IterableDatasetWrapper")

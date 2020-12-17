@@ -126,6 +126,14 @@ using PvInstance = PvInstanceObject*;
 
 inline PvInstance make_pv_instance() { return new PvInstanceObject(); }
 
+struct PvSlotConfig {
+  uint32_t pv_slot;
+  uint32_t slot_a;
+  uint32_t slot_b;
+  size_t rank_a;
+  size_t rank_b;
+};
+
 class DataFeed {
  public:
   DataFeed() {
@@ -213,6 +221,13 @@ class DataFeed {
   virtual const paddle::platform::Place& GetPlace() const { return place_; }
   virtual void SetSampleRate(float r) { sample_rate_ = r; }
 
+  virtual void SetPvSlots(const std::vector<PvSlotConfig>& pv_slot_config) {
+    pv_slot_config_ = pv_slot_config;
+  }
+  virtual const std::vector<PvSlotConfig>& GetPvSlots() {
+    return pv_slot_config_;
+  };
+
  protected:
   // The following three functions are used to check if it is executed in this
   // order:
@@ -272,6 +287,8 @@ class DataFeed {
   // The input type of pipe reader, 0 for one sample, 1 for one batch
   int input_type_;
   float sample_rate_ = 1.0f;
+  
+  std::vector<PvSlotConfig> pv_slot_config_;
 };
 
 // PrivateQueueDataFeed is the base virtual class for ohther DataFeeds.

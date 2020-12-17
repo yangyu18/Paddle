@@ -1809,6 +1809,9 @@ void PadBoxSlotDataset::CreateReaders() {
     readers_[i]->SetParseContent(parse_content_);
     readers_[i]->SetParseLogKey(parse_logkey_);
     readers_[i]->SetEnablePvMerge(enable_pv_merge_);
+    if (pv_slot_config_.size() > 0) {
+        readers_[i]->SetPvSlots(pv_slot_config_);
+    }
     // Notice: it is only valid for untest of test_paddlebox_datafeed.
     // In fact, it does not affect the train process when paddle is
     // complied with Box_Ps.
@@ -1860,6 +1863,14 @@ void PadBoxSlotDataset::PreprocessInstance() {
       input_pv_ins_.push_back(pv_instance);
     }
   }
+
+  // YY TODO after merge pv, extract pv feasign
+  //if (all_records_num > 1) {
+  //  auto& ins = input_records_[0];
+  //  std::vector<std::vector<uint64_t>> slot_uint64_feasigns(1);
+  //  slot_uint64_feasigns[0].push_back((uint64_t)11844759609367775880ull);
+  //  ins->slot_uint64_feasigns_.add_slot_feasigns(slot_uint64_feasigns, 1);
+  //}
 }
 // restore
 void PadBoxSlotDataset::PostprocessInstance() {}

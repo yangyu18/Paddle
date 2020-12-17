@@ -150,6 +150,9 @@ class Dataset {
   // set fleet send sleep seconds
   virtual void SetFleetSendSleepSeconds(int seconds) = 0;
 
+  virtual void SetPvSlots(const std::vector<std::vector<size_t>>& pv_slot_config) = 0;
+  virtual const std::vector<PvSlotConfig>& GetPvSlots() = 0;
+
  protected:
   virtual int ReceiveFromClient(int msg_type, int client_id,
                                 const std::string& msg) = 0;
@@ -238,6 +241,22 @@ class DatasetImpl : public Dataset {
   virtual void DynamicAdjustReadersNum(int thread_num);
   virtual void SetFleetSendSleepSeconds(int seconds);
 
+  virtual void SetPvSlots(const std::vector<std::vector<size_t>>& pv_slot_config) {
+    for (auto& config : pv_slot_config) {
+        PvSlotConfig pv_slot_conf;
+        pv_slot_conf.pv_slot = config[0];
+        pv_slot_conf.slot_a = config[1];
+        pv_slot_conf.rank_a = config[2];
+        pv_slot_conf.slot_b = config[3];
+        pv_slot_conf.rank_b = config[4];
+        pv_slot_config_.emplace_back(pv_slot_conf);
+        std::cout << pv_slot_conf.pv_slot << " [YY] " << pv_slot_conf.slot_a << std::endl;
+    }
+  }
+  virtual const std::vector<PvSlotConfig>& GetPvSlots() {
+    return pv_slot_config_;
+  }
+
  protected:
   virtual int ReceiveFromClient(int msg_type, int client_id,
                                 const std::string& msg);
@@ -291,6 +310,7 @@ class DatasetImpl : public Dataset {
   int64_t global_index_ = 0;
   std::vector<std::shared_ptr<ThreadPool>> consume_task_pool_;
   std::vector<T> input_records_;  // only for paddleboxdatafeed
+  std::vector<PvSlotConfig> pv_slot_config_;
 };
 
 // use std::vector<MultiSlotType> or Record as data type
@@ -355,6 +375,22 @@ class PadBoxSlotDataset : public DatasetImpl<SlotRecord> {
   virtual int64_t GetPvDataSize() { return input_pv_ins_.size(); }
   virtual int64_t GetShuffleDataSize() { return input_records_.size(); }
 
+  virtual void SetPvSlots(const std::vector<std::vector<size_t>>& pv_slot_config) {
+    for (auto& config : pv_slot_config) {
+        PvSlotConfig pv_slot_conf;
+        pv_slot_conf.pv_slot = config[0];
+        pv_slot_conf.slot_a = config[1];
+        pv_slot_conf.rank_a = config[2];
+        pv_slot_conf.slot_b = config[3];
+        pv_slot_conf.rank_b = config[4];
+        pv_slot_config_.emplace_back(pv_slot_conf);
+        std::cout << pv_slot_conf.pv_slot << " [YY] " << pv_slot_conf.slot_a << std::endl;
+    }
+  }
+  virtual const std::vector<PvSlotConfig>& GetPvSlots() {
+    return pv_slot_config_;
+  }
+
  protected:
   // shuffle data
   virtual void ShuffleData(std::vector<std::thread>* shuffle_threads,
@@ -377,6 +413,7 @@ class PadBoxSlotDataset : public DatasetImpl<SlotRecord> {
   std::atomic<int> shuffle_counter_{0};
   void* data_consumer_ = nullptr;
   std::atomic<int> receiver_cnt_{0};
+  std::vector<PvSlotConfig> pv_slot_config_;
 };
 #endif
 
