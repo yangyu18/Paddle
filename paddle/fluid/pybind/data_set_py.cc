@@ -309,6 +309,8 @@ void BindDataset(py::module *m) {
            py::call_guard<py::gil_scoped_release>())
       .def("enable_pv_merge", &framework::Dataset::EnablePvMerge,
            py::call_guard<py::gil_scoped_release>())
+      .def("set_merge_by_cmatch_sid", &framework::Dataset::SetMergeByCmatchSid,
+           py::call_guard<py::gil_scoped_release>())
       .def("set_pv_slots", &framework::Dataset::SetPvSlots,
            py::call_guard<py::gil_scoped_release>())
       .def("get_pv_slots", &framework::Dataset::GetPvSlots,

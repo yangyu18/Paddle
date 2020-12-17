@@ -52,6 +52,7 @@ DatasetImpl<T>::DatasetImpl() {
   fleet_send_sleep_seconds_ = 0;
   merge_by_insid_ = false;
   merge_by_sid_ = true;
+  merge_by_cmatch_sid_ = false;
   enable_pv_merge_ = false;
   merge_size_ = 2;
   parse_ins_id_ = false;
@@ -149,6 +150,17 @@ void DatasetImpl<T>::SetMergeByInsId(int merge_size) {
 template <typename T>
 void DatasetImpl<T>::SetMergeBySid(bool is_merge) {
   merge_by_sid_ = is_merge;
+  if (merge_by_sid_ && merge_by_cmatch_sid_) {
+    merge_by_cmatch_sid_ = false;
+  }
+}
+
+template <typename T>
+void DatasetImpl<T>::SetMergeByCmatchSid(bool is_merge) {
+  merge_by_cmatch_sid_ = is_merge;
+  if (merge_by_sid_ && merge_by_cmatch_sid_) {
+    merge_by_sid_ = false;
+  }
 }
 
 template <typename T>
@@ -890,10 +902,21 @@ void MultiSlotDataset::PreprocessInstance() {
     return;
   }
 
-  std::sort(all_records.data(), all_records.data() + all_records_num,
-            [](const Record* lhs, const Record* rhs) {
-              return lhs->search_id < rhs->search_id;
-            });
+  if (merge_by_cmatch_sid_) {
+    std::sort(all_records.data(), all_records.data() + all_records_num,
+                [](const Record* lhs, const Record* rhs) {
+                  if (lhs->search_id == rhs->search_id) {
+                    return lhs->cmatch < rhs->cmatch;
+                  } else {
+                    return lhs->search_id < rhs->search_id;
+                  }
+                });
+  } else {
+    std::sort(all_records.data(), all_records.data() + all_records_num,
+                [](const Record* lhs, const Record* rhs) {
+                  return lhs->search_id < rhs->search_id;
+                });
+  }
 
   std::vector<PvInstance> pv_data;
   if (merge_by_sid_) {
@@ -905,6 +928,21 @@ void MultiSlotDataset::PreprocessInstance() {
         pv_instance->merge_instance(ins);
         pv_data.push_back(pv_instance);
         last_search_id = ins->search_id;
+        continue;
+      }
+      pv_data.back()->merge_instance(ins);
+    }
+  } else if (merge_by_cmatch_sid_) {
+    uint64_t last_search_id = 0;
+    uint32_t last_cmatch = 0;
+    for (int i = 0; i < all_records_num; ++i) {
+      Record* ins = all_records[i];
+      if (i == 0 || last_search_id != ins->search_id || last_cmatch != ins->cmatch) {
+        PvInstance pv_instance = make_pv_instance();
+        pv_instance->merge_instance(ins);
+        pv_data.push_back(pv_instance);
+        last_search_id = ins->search_id;
+        last_cmatch = ins->cmatch;
         continue;
       }
       pv_data.back()->merge_instance(ins);
