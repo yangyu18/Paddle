@@ -252,7 +252,6 @@ class DatasetImpl : public Dataset {
         pv_slot_conf.slot_b = config[3];
         pv_slot_conf.rank_b = config[4];
         pv_slot_config_.emplace_back(pv_slot_conf);
-        std::cout << pv_slot_conf.pv_slot << " [YY] " << pv_slot_conf.slot_a << std::endl;
     }
   }
   virtual const std::vector<PvSlotConfig>& GetPvSlots() {
@@ -387,7 +386,6 @@ class PadBoxSlotDataset : public DatasetImpl<SlotRecord> {
         pv_slot_conf.slot_b = config[3];
         pv_slot_conf.rank_b = config[4];
         pv_slot_config_.emplace_back(pv_slot_conf);
-        std::cout << pv_slot_conf.pv_slot << " [YY] " << pv_slot_conf.slot_a << std::endl;
     }
   }
   virtual const std::vector<PvSlotConfig>& GetPvSlots() {
@@ -404,7 +402,7 @@ class PadBoxSlotDataset : public DatasetImpl<SlotRecord> {
 
  private:
   void MergeInsKeys(const Channel<SlotRecord>& in);
-
+  void GenPvFeasigns();
  private:
   Channel<SlotRecord> shuffle_channel_ = nullptr;
   std::vector<int> mpi_flags_;

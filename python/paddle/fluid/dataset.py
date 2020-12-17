@@ -400,7 +400,6 @@ class InMemoryDataset(DatasetBase):
         self.dataset.set_data_feed_desc(self.desc())
         if self.pv_slots is not None and len(self.pv_slots) > 0:
             assert len(self.pv_slots[0]) == 5
-            print 'YY PV SLOTS SIZE:', self.pv_slots
             self.dataset.set_pv_slots(self.pv_slots)
         self.dataset.create_channel()
         self.dataset.create_readers()
@@ -1181,6 +1180,7 @@ class PadBoxSlotDataset(BoxPSDataset):
         self.parse_content = False
         self.parse_logkey = False
         self.merge_by_sid = True
+        self.merge_by_cmatch_sid = False
         self.enable_pv_merge = False
         self.merge_by_lineid = False
         self.fleet_send_sleep_seconds = None

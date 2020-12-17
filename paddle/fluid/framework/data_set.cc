@@ -13,6 +13,7 @@
  *     limitations under the License. */
 
 #include "paddle/fluid/framework/data_set.h"
+#include "paddle/fluid/framework/fea_util.h"
 #include <algorithm>
 #include <random>
 #include <unordered_map>
@@ -1680,6 +1681,11 @@ class ShuffleResultWaitGroup : public boxps::ResultCallback {
   std::condition_variable cond_;
   int counter_ = 0;
 };
+
+inline uint64_t cantor_pair(uint64_t a, uint64_t b) {
+    return (a + b) * (a + b + 1) / 2 + b;
+}
+
 // shuffle data
 void PadBoxSlotDataset::ShuffleData(std::vector<std::thread>* shuffle_threads,
                                     int thread_num) {
@@ -1701,7 +1707,11 @@ void PadBoxSlotDataset::ShuffleData(std::vector<std::thread>* shuffle_threads,
         for (auto& t : data) {
           int client_id = 0;
           if (enable_pv_merge_) {  // shuffle by pv
-            client_id = t->search_id % mpi_size_;
+            if (merge_by_cmatch_sid_) {
+              client_id = cantor_pair(static_cast<uint64_t>(t->cmatch), t->search_id) % mpi_size_;
+            } else {
+              client_id = t->search_id % mpi_size_;
+            }
           } else if (merge_by_insid_) {  // shuffle by lineid
             client_id =
                 XXH64(t->ins_id_.data(), t->ins_id_.length(), 0) % mpi_size_;
@@ -1876,10 +1886,22 @@ void PadBoxSlotDataset::PreprocessInstance() {
   }
 
   size_t all_records_num = input_records_.size();
-  std::sort(input_records_.data(), input_records_.data() + all_records_num,
+  if (merge_by_cmatch_sid_) {
+    std::sort(input_records_.data(), input_records_.data() + all_records_num,
+              [](const SlotRecord& lhs, const SlotRecord& rhs) {
+                    if (lhs->search_id == rhs->search_id) {
+                      return lhs->cmatch < rhs->cmatch;
+                    } else {
+                      return lhs->search_id < rhs->search_id;
+                    }
+              });
+  } else {
+    std::sort(input_records_.data(), input_records_.data() + all_records_num,
             [](const SlotRecord& lhs, const SlotRecord& rhs) {
               return lhs->search_id < rhs->search_id;
             });
+  }  
+
   if (merge_by_sid_) {
     uint64_t last_search_id = 0;
     for (size_t i = 0; i < all_records_num; ++i) {
@@ -1893,6 +1915,21 @@ void PadBoxSlotDataset::PreprocessInstance() {
       }
       input_pv_ins_.back()->merge_instance(ins);
     }
+  } else if (merge_by_cmatch_sid_) {
+    uint64_t last_search_id = 0;
+    uint32_t last_cmatch = 0;
+    for (size_t i = 0; i < all_records_num; ++i) {
+      auto& ins = input_records_[i];
+      if (i == 0 || last_search_id != ins->search_id || last_cmatch != ins->cmatch) {
+        SlotPvInstance pv_instance = make_slotpv_instance();
+        pv_instance->merge_instance(ins);
+        input_pv_ins_.emplace_back(pv_instance);
+        last_search_id = ins->search_id;
+        last_cmatch = ins->cmatch;
+        continue;
+      }
+      input_pv_ins_.back()->merge_instance(ins);
+    }
   } else {
     for (size_t i = 0; i < all_records_num; ++i) {
       auto& ins = input_records_[i];
@@ -1902,6 +1939,15 @@ void PadBoxSlotDataset::PreprocessInstance() {
     }
   }
 
+  if (pv_slot_config_.size() > 0) {
+    GenPvFeasigns();
+    LOG(WARNING) << "YY pv slots size: " << pv_slot_config_.size();
+  }
+
+  // test YY
+  //uint64_t cross_feasign = 0;
+  //generate_combine_fea_sign((uint32_t)1999, 3ull, 4ull, &cross_feasign);
+  
   // YY TODO after merge pv, extract pv feasign
   //if (all_records_num > 1) {
   //  auto& ins = input_records_[0];
@@ -1910,6 +1956,10 @@ void PadBoxSlotDataset::PreprocessInstance() {
   //  ins->slot_uint64_feasigns_.add_slot_feasigns(slot_uint64_feasigns, 1);
   //}
 }
+void PadBoxSlotDataset::GenPvFeasigns() {
+
+}
+
 // restore
 void PadBoxSlotDataset::PostprocessInstance() {}
 
