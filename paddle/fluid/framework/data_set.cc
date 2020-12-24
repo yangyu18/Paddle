@@ -1548,6 +1548,8 @@ void PadBoxSlotDataset::LoadIntoMemory() {
   //  shuffle_channel_->Clear();
   //  input_channel_->Clear();
 
+  PreprocessInstance();
+
   timeline.Pause();
   VLOG(1) << "PadBoxSlotDataset::LoadIntoMemory() end"
           << ", memory data size=" << input_records_.size()
@@ -1963,7 +1965,76 @@ inline void print_slot_values(SlotValues<T>& slot_values) {
         std::cout << std::endl;
     }
 }
+void PadBoxSlotDataset::GenFeasignsOfOnePv(SlotPvInstance pv,
+                            std::unordered_map<std::string, int>& slot_idxs,
+                            std::unordered_set<uint64_t>& pv_fea_set) {
+  std::vector<SlotRecord> ads = pv->ads;
+
+  const int MAX_RANK = 3;
+  std::unordered_map<size_t, int> rank_idx;
+  for (size_t i = 0; i < ads.size(); i++) {
+    rank_idx[ads[i]->rank] = i;
+  }
+  
+  // key: slot_idx, val: pv feasigns.
+  std::unordered_map<int, std::vector<uint64_t>> pv_slot_feas;
+  for (PvSlotConfig& pv_slot_conf : pv_slot_config_) {
+    if (slot_idxs.find(std::to_string(pv_slot_conf.pv_slot)) == slot_idxs.end()
+        || slot_idxs.find(std::to_string(pv_slot_conf.slot_a)) == slot_idxs.end()
+        || slot_idxs.find(std::to_string(pv_slot_conf.slot_b)) == slot_idxs.end()
+        || pv_slot_conf.rank_a > MAX_RANK || pv_slot_conf.rank_b > MAX_RANK
+        || rank_idx.find(pv_slot_conf.rank_a) == rank_idx.end()
+        || rank_idx.find(pv_slot_conf.rank_b) == rank_idx.end()) {
+      continue;
+    }
+    int pv_slot_idx = slot_idxs[std::to_string(pv_slot_conf.pv_slot)];
+    int slot_a_idx = slot_idxs[std::to_string(pv_slot_conf.slot_a)];
+    int slot_b_idx = slot_idxs[std::to_string(pv_slot_conf.slot_b)];
+
+    SlotRecord ad_a = ads[rank_idx[pv_slot_conf.rank_a]];
+    SlotRecord ad_b = ads[rank_idx[pv_slot_conf.rank_b]];
+    int a_lo = ad_a->slot_uint64_feasigns_.slot_offsets[slot_a_idx];
+    int a_hi = ad_a->slot_uint64_feasigns_.slot_offsets[slot_a_idx + 1];
+    int b_lo = ad_b->slot_uint64_feasigns_.slot_offsets[slot_b_idx];
+    int b_hi = ad_b->slot_uint64_feasigns_.slot_offsets[slot_b_idx + 1];
+    if (a_lo == a_hi || b_lo == b_hi) {
+      continue;
+    }
+
+    std::vector<uint64_t> pv_feas;
+    for (int a_i = a_lo; a_i < a_hi; a_i++) {
+      for (int b_i = b_lo; b_i < b_hi; b_i++) {
+        uint64_t pv_fea = 0;
+        generate_combine_fea_sign((uint32_t)pv_slot_conf.pv_slot, 
+                                  ad_a->slot_uint64_feasigns_.slot_values[a_i],
+                                  ad_b->slot_uint64_feasigns_.slot_values[b_i],
+                                  &pv_fea);
+        pv_feas.emplace_back(pv_fea);
+        pv_fea_set.emplace(pv_fea);
+      }
+    }
+    pv_slot_feas[pv_slot_idx] = pv_feas; 
+  }
+  
+  for (SlotRecord ad : ads) {
+    for (auto& pv_slot_fea : pv_slot_feas) {
+      ad->slot_uint64_feasigns_.insert_values(pv_slot_fea.second, pv_slot_fea.first);
+    }
+  }
+}
 void PadBoxSlotDataset::GenPvFeasigns() {
+  platform::Timer timeline;
+  timeline.Start();
+
+  std::vector<std::thread> feed_threads;
+  auto boxps_ptr = BoxWrapper::GetInstance();
+  boxps::PSAgentBase* agent = boxps_ptr->GetAgent();
+
+  int thread_num = boxps_ptr->GetFeedpassThreadNum();
+  if (thread_num > FLAGS_padbox_dataset_merge_thread_num) {
+    thread_num = FLAGS_padbox_dataset_merge_thread_num;
+  }
+
   std::vector<AllSlotInfo>& slots_info = reinterpret_cast<SlotPaddleBoxDataFeed*>(readers_[0].get())
                                                 ->GetAllSlotsInfo();
   std::unordered_map<std::string, int> slot_idxs;
@@ -1973,65 +2044,31 @@ void PadBoxSlotDataset::GenPvFeasigns() {
     }
   }
 
-  for (SlotPvInstance pv : input_pv_ins_) {
-    std::vector<SlotRecord> ads = pv->ads;
-
-    const int MAX_RANK = 3;
-    std::unordered_map<size_t, int> rank_idx;
-    for (size_t i = 0; i < ads.size(); i++) {
-      rank_idx[ads[i]->rank] = i;
-    }
+  for (int tid = 0; tid < thread_num; ++tid) {
+    int begin = input_pv_ins_.size() / thread_num * tid;
+    int end = (tid + 1 == thread_num) ? input_pv_ins_.size() : begin + input_pv_ins_.size() / thread_num;
+    feed_threads.push_back(std::thread([this, &slot_idxs, begin, end, agent, tid]() {
+      SetCPUAffinity(tid, false);
     
-    // key: slot_idx, val: pv feasigns.
-    std::unordered_map<int, std::vector<uint64_t>> pv_slot_feas;
-    for (PvSlotConfig& pv_slot_conf : pv_slot_config_) {
-      if (slot_idxs.find(std::to_string(pv_slot_conf.pv_slot)) == slot_idxs.end()
-          || slot_idxs.find(std::to_string(pv_slot_conf.slot_a)) == slot_idxs.end()
-          || slot_idxs.find(std::to_string(pv_slot_conf.slot_b)) == slot_idxs.end()
-          || pv_slot_conf.rank_a > MAX_RANK || pv_slot_conf.rank_b > MAX_RANK
-          || rank_idx.find(pv_slot_conf.rank_a) == rank_idx.end()
-          || rank_idx.find(pv_slot_conf.rank_b) == rank_idx.end()) {
-        continue;
-      }
-      int pv_slot_idx = slot_idxs[std::to_string(pv_slot_conf.pv_slot)];
-      int slot_a_idx = slot_idxs[std::to_string(pv_slot_conf.slot_a)];
-      int slot_b_idx = slot_idxs[std::to_string(pv_slot_conf.slot_b)];
-
-      SlotRecord ad_a = ads[rank_idx[pv_slot_conf.rank_a]];
-      SlotRecord ad_b = ads[rank_idx[pv_slot_conf.rank_b]];
-      int a_lo = ad_a->slot_uint64_feasigns_.slot_offsets[slot_a_idx];
-      int a_hi = ad_a->slot_uint64_feasigns_.slot_offsets[slot_a_idx + 1];
-      int b_lo = ad_b->slot_uint64_feasigns_.slot_offsets[slot_b_idx];
-      int b_hi = ad_b->slot_uint64_feasigns_.slot_offsets[slot_b_idx + 1];
-      if (a_lo == a_hi || b_lo == b_hi) {
-        continue;
-      }
-
-      std::vector<uint64_t> pv_feas;
-      for (int a_i = a_lo; a_i < a_hi; a_i++) {
-        for (int b_i = b_lo; b_i < b_hi; b_i++) {
-          uint64_t pv_fea = 0;
-          generate_combine_fea_sign((uint32_t)pv_slot_conf.pv_slot, 
-                                    ad_a->slot_uint64_feasigns_.slot_values[a_i],
-                                    ad_b->slot_uint64_feasigns_.slot_values[b_i],
-                                    &pv_fea);
-          pv_feas.emplace_back(pv_fea);
+      std::unordered_set<uint64_t> pv_fea_set;
+      for (int i = begin; i < end; i++) {
+        pv_fea_set.clear();
+        GenFeasignsOfOnePv(input_pv_ins_[i], slot_idxs, pv_fea_set);
+        if (pv_fea_set.size() > 0) {
+          std::vector<uint64_t> pv_feas(pv_fea_set.begin(), pv_fea_set.end());
+          agent->AddKeys(&pv_feas[0], pv_fea_set.size(), tid);
         }
       }
-      pv_slot_feas[pv_slot_idx] = pv_feas; 
-    }
-
-    
-    for (SlotRecord ad : ads) {
-      std::cout << "        ins_id:" << ad->ins_id_ << ", sid:" << ad->search_id
-            << ", rank:" << ad->rank << ", cmatch:" << ad->cmatch << std::endl;
-      //print_slot_values<uint64_t>(ad->slot_uint64_feasigns_);
-      for (auto& pv_slot_fea : pv_slot_feas) {
-        ad->slot_uint64_feasigns_.insert_values(pv_slot_fea.second, pv_slot_fea.first);
-      }
-      //print_slot_values<uint64_t>(ad->slot_uint64_feasigns_);
-    }
+    }));
   }
+
+  for (auto& t : feed_threads) {
+    t.join();
+  }
+  timeline.Pause();
+  VLOG(1) << "PadBoxSlotDataset::GenPvFeas end"
+          << ", cost time=" << timeline.ElapsedSec() << " seconds";
+
 }
 
 // restore

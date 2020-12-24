@@ -403,6 +403,9 @@ class PadBoxSlotDataset : public DatasetImpl<SlotRecord> {
  private:
   void MergeInsKeys(const Channel<SlotRecord>& in);
   void GenPvFeasigns();
+  void GenFeasignsOfOnePv(SlotPvInstance pv,
+           std::unordered_map<std::string, int>& slot_idxs,
+           std::unordered_set<uint64_t>& pv_fea_set);
  private:
   Channel<SlotRecord> shuffle_channel_ = nullptr;
   std::vector<int> mpi_flags_;
