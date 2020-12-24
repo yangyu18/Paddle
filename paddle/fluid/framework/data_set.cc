@@ -1967,7 +1967,7 @@ inline void print_slot_values(SlotValues<T>& slot_values) {
 }
 void PadBoxSlotDataset::GenFeasignsOfOnePv(SlotPvInstance pv,
                             std::unordered_map<std::string, int>& slot_idxs,
-                            std::unordered_set<uint64_t>& pv_fea_set) {
+                            std::vector<uint64_t>& pv_fea_set) {
   std::vector<SlotRecord> ads = pv->ads;
 
   const int MAX_RANK = 3;
@@ -2010,7 +2010,7 @@ void PadBoxSlotDataset::GenFeasignsOfOnePv(SlotPvInstance pv,
                                   ad_b->slot_uint64_feasigns_.slot_values[b_i],
                                   &pv_fea);
         pv_feas.emplace_back(pv_fea);
-        pv_fea_set.emplace(pv_fea);
+        pv_fea_set.emplace_back(pv_fea);
       }
     }
     pv_slot_feas[pv_slot_idx] = pv_feas; 
@@ -2050,12 +2050,11 @@ void PadBoxSlotDataset::GenPvFeasigns() {
     feed_threads.push_back(std::thread([this, &slot_idxs, begin, end, agent, tid]() {
       SetCPUAffinity(tid, false);
     
-      std::unordered_set<uint64_t> pv_fea_set;
+      std::vector<uint64_t> pv_fea_set;
       for (int i = begin; i < end; i++) {
         pv_fea_set.clear();
         GenFeasignsOfOnePv(input_pv_ins_[i], slot_idxs, pv_fea_set);
         if (pv_fea_set.size() > 0) {
-          std::vector<uint64_t> pv_feas(pv_fea_set.begin(), pv_fea_set.end());
           agent->AddKeys(&pv_feas[0], pv_fea_set.size(), tid);
         }
       }
