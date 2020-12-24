@@ -1941,23 +1941,97 @@ void PadBoxSlotDataset::PreprocessInstance() {
 
   if (pv_slot_config_.size() > 0) {
     GenPvFeasigns();
-    LOG(WARNING) << "YY pv slots size: " << pv_slot_config_.size();
   }
 
-  // test YY
+  // test
   //uint64_t cross_feasign = 0;
-  //generate_combine_fea_sign((uint32_t)1999, 3ull, 4ull, &cross_feasign);
-  
-  // YY TODO after merge pv, extract pv feasign
-  //if (all_records_num > 1) {
-  //  auto& ins = input_records_[0];
-  //  std::vector<std::vector<uint64_t>> slot_uint64_feasigns(1);
-  //  slot_uint64_feasigns[0].push_back((uint64_t)11844759609367775880ull);
-  //  ins->slot_uint64_feasigns_.add_slot_feasigns(slot_uint64_feasigns, 1);
-  //}
+  //generate_combine_fea_sign((uint32_t)16161, 11344125145877867431ull, 11762678867675955238ull, &cross_feasign);
+  // result is 271020980234854148. Right!
+}
+
+template <typename T>
+inline void print_slot_values(SlotValues<T>& slot_values) {
+    auto& values = slot_values.slot_values;
+    auto& offsets = slot_values.slot_offsets;
+    int slot_size = offsets.size();
+    for (int i = 1; i < slot_size; i++) {
+        int lo = offsets[i - 1];
+        int hi = offsets[i];
+        for (int i = lo; i < hi; i++) {
+            std::cout << " | " << values[i];
+        }
+        std::cout << std::endl;
+    }
 }
 void PadBoxSlotDataset::GenPvFeasigns() {
+  std::vector<AllSlotInfo>& slots_info = reinterpret_cast<SlotPaddleBoxDataFeed*>(readers_[0].get())
+                                                ->GetAllSlotsInfo();
+  std::unordered_map<std::string, int> slot_idxs;
+  for (AllSlotInfo slot_info : slots_info) {
+    if (slot_info.used_idx > 0) {
+      slot_idxs[slot_info.slot] = slot_info.slot_value_idx;
+    }
+  }
 
+  for (SlotPvInstance pv : input_pv_ins_) {
+    std::vector<SlotRecord> ads = pv->ads;
+
+    const int MAX_RANK = 3;
+    std::unordered_map<size_t, int> rank_idx;
+    for (size_t i = 0; i < ads.size(); i++) {
+      rank_idx[ads[i]->rank] = i;
+    }
+    
+    // key: slot_idx, val: pv feasigns.
+    std::unordered_map<int, std::vector<uint64_t>> pv_slot_feas;
+    for (PvSlotConfig& pv_slot_conf : pv_slot_config_) {
+      if (slot_idxs.find(std::to_string(pv_slot_conf.pv_slot)) == slot_idxs.end()
+          || slot_idxs.find(std::to_string(pv_slot_conf.slot_a)) == slot_idxs.end()
+          || slot_idxs.find(std::to_string(pv_slot_conf.slot_b)) == slot_idxs.end()
+          || pv_slot_conf.rank_a > MAX_RANK || pv_slot_conf.rank_b > MAX_RANK
+          || rank_idx.find(pv_slot_conf.rank_a) == rank_idx.end()
+          || rank_idx.find(pv_slot_conf.rank_b) == rank_idx.end()) {
+        continue;
+      }
+      int pv_slot_idx = slot_idxs[std::to_string(pv_slot_conf.pv_slot)];
+      int slot_a_idx = slot_idxs[std::to_string(pv_slot_conf.slot_a)];
+      int slot_b_idx = slot_idxs[std::to_string(pv_slot_conf.slot_b)];
+
+      SlotRecord ad_a = ads[rank_idx[pv_slot_conf.rank_a]];
+      SlotRecord ad_b = ads[rank_idx[pv_slot_conf.rank_b]];
+      int a_lo = ad_a->slot_uint64_feasigns_.slot_offsets[slot_a_idx];
+      int a_hi = ad_a->slot_uint64_feasigns_.slot_offsets[slot_a_idx + 1];
+      int b_lo = ad_b->slot_uint64_feasigns_.slot_offsets[slot_b_idx];
+      int b_hi = ad_b->slot_uint64_feasigns_.slot_offsets[slot_b_idx + 1];
+      if (a_lo == a_hi || b_lo == b_hi) {
+        continue;
+      }
+
+      std::vector<uint64_t> pv_feas;
+      for (int a_i = a_lo; a_i < a_hi; a_i++) {
+        for (int b_i = b_lo; b_i < b_hi; b_i++) {
+          uint64_t pv_fea = 0;
+          generate_combine_fea_sign((uint32_t)pv_slot_conf.pv_slot, 
+                                    ad_a->slot_uint64_feasigns_.slot_values[a_i],
+                                    ad_b->slot_uint64_feasigns_.slot_values[b_i],
+                                    &pv_fea);
+          pv_feas.emplace_back(pv_fea);
+        }
+      }
+      pv_slot_feas[pv_slot_idx] = pv_feas; 
+    }
+
+    
+    for (SlotRecord ad : ads) {
+      std::cout << "        ins_id:" << ad->ins_id_ << ", sid:" << ad->search_id
+            << ", rank:" << ad->rank << ", cmatch:" << ad->cmatch << std::endl;
+      //print_slot_values<uint64_t>(ad->slot_uint64_feasigns_);
+      for (auto& pv_slot_fea : pv_slot_feas) {
+        ad->slot_uint64_feasigns_.insert_values(pv_slot_fea.second, pv_slot_fea.first);
+      }
+      //print_slot_values<uint64_t>(ad->slot_uint64_feasigns_);
+    }
+  }
 }
 
 // restore

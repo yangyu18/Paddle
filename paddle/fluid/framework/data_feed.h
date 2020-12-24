@@ -811,6 +811,13 @@ struct SlotValues {
     slot_offsets.clear();
     slot_values.clear();
   }
+  void insert_values(const std::vector<T>& feasigns, const int slot_idx) {
+    uint32_t offset = slot_offsets[slot_idx];
+    slot_values.insert(slot_values.begin() + offset, feasigns.begin(), feasigns.end());
+    for (size_t i = slot_idx + 1; i < slot_offsets.size(); i++) {
+      slot_offsets[i] += feasigns.size();
+    }
+  }
 };
 // sizeof Record is much less than std::vector<MultiSlotType>
 struct SlotRecordObject {
@@ -1358,6 +1365,10 @@ class SlotPaddleBoxDataFeed : public DataFeed {
   void AddBatchOffset(const std::pair<int, int>& off) {
     batch_offsets_.push_back(off);
   }
+  std::vector<AllSlotInfo>& GetAllSlotsInfo() {
+    return all_slots_info_;
+  }
+
   void GetUsedSlotIndex(std::vector<int>* used_slot_index);
   // expand values
   void ExpandSlotRecord(SlotRecord* ins);
