@@ -246,9 +246,9 @@ class DatasetImpl : public Dataset {
   virtual void SetPvSlots(const std::vector<std::vector<size_t>>& pv_slot_config) {
     for (auto& config : pv_slot_config) {
         PvSlotConfig pv_slot_conf;
-        pv_slot_conf.pv_slot = config[0];
-        pv_slot_conf.slot_a = config[1];
-        pv_slot_conf.rank_a = config[2];
+        pv_slot_conf.pv_slot = std::to_string(config[0]);
+        pv_slot_conf.slot_a = std::to_string(config[1]);
+        pv_slot_conf.rank_a = std::to_string(config[2]);
         pv_slot_conf.slot_b = config[3];
         pv_slot_conf.rank_b = config[4];
         pv_slot_config_.emplace_back(pv_slot_conf);
@@ -380,9 +380,9 @@ class PadBoxSlotDataset : public DatasetImpl<SlotRecord> {
   virtual void SetPvSlots(const std::vector<std::vector<size_t>>& pv_slot_config) {
     for (auto& config : pv_slot_config) {
         PvSlotConfig pv_slot_conf;
-        pv_slot_conf.pv_slot = config[0];
-        pv_slot_conf.slot_a = config[1];
-        pv_slot_conf.rank_a = config[2];
+        pv_slot_conf.pv_slot = std::to_string(config[0]);
+        pv_slot_conf.slot_a = std::to_string(config[1]);
+        pv_slot_conf.rank_a = std::to_string(config[2]);
         pv_slot_conf.slot_b = config[3];
         pv_slot_conf.rank_b = config[4];
         pv_slot_config_.emplace_back(pv_slot_conf);

@@ -127,9 +127,9 @@ using PvInstance = PvInstanceObject*;
 inline PvInstance make_pv_instance() { return new PvInstanceObject(); }
 
 struct PvSlotConfig {
-  uint32_t pv_slot;
-  uint32_t slot_a;
-  uint32_t slot_b;
+  std::string pv_slot;
+  std::string slot_a;
+  std::string slot_b;
   size_t rank_a;
   size_t rank_b;
 };

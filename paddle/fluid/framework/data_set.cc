@@ -1969,6 +1969,12 @@ void PadBoxSlotDataset::GenFeasignsOfOnePv(SlotPvInstance pv,
                             std::unordered_map<std::string, int>& slot_idxs,
                             std::vector<uint64_t>& pv_fea_set) {
   std::vector<SlotRecord> ads = pv->ads;
+  if (ads.size() < 2) {
+    return;
+  }
+  if (ads[0]->cmatch != 222 && ads[0]->cmatch != 223) { // TODO: add cmatch configure.
+    return;
+  }
 
   const int MAX_RANK = 3;
   std::unordered_map<size_t, int> rank_idx;
@@ -1979,17 +1985,17 @@ void PadBoxSlotDataset::GenFeasignsOfOnePv(SlotPvInstance pv,
   // key: slot_idx, val: pv feasigns.
   std::unordered_map<int, std::vector<uint64_t>> pv_slot_feas;
   for (PvSlotConfig& pv_slot_conf : pv_slot_config_) {
-    if (slot_idxs.find(std::to_string(pv_slot_conf.pv_slot)) == slot_idxs.end()
-        || slot_idxs.find(std::to_string(pv_slot_conf.slot_a)) == slot_idxs.end()
-        || slot_idxs.find(std::to_string(pv_slot_conf.slot_b)) == slot_idxs.end()
+    if (slot_idxs.find(pv_slot_conf.pv_slot) == slot_idxs.end()
+        || slot_idxs.find(pv_slot_conf.slot_a) == slot_idxs.end()
+        || slot_idxs.find(pv_slot_conf.slot_b) == slot_idxs.end()
         || pv_slot_conf.rank_a > MAX_RANK || pv_slot_conf.rank_b > MAX_RANK
         || rank_idx.find(pv_slot_conf.rank_a) == rank_idx.end()
         || rank_idx.find(pv_slot_conf.rank_b) == rank_idx.end()) {
       continue;
     }
-    int pv_slot_idx = slot_idxs[std::to_string(pv_slot_conf.pv_slot)];
-    int slot_a_idx = slot_idxs[std::to_string(pv_slot_conf.slot_a)];
-    int slot_b_idx = slot_idxs[std::to_string(pv_slot_conf.slot_b)];
+    int pv_slot_idx = slot_idxs[pv_slot_conf.pv_slot];
+    int slot_a_idx = slot_idxs[pv_slot_conf.slot_a];
+    int slot_b_idx = slot_idxs[pv_slot_conf.slot_b];
 
     SlotRecord ad_a = ads[rank_idx[pv_slot_conf.rank_a]];
     SlotRecord ad_b = ads[rank_idx[pv_slot_conf.rank_b]];
@@ -2038,7 +2044,7 @@ void PadBoxSlotDataset::GenPvFeasigns() {
   std::vector<AllSlotInfo>& slots_info = reinterpret_cast<SlotPaddleBoxDataFeed*>(readers_[0].get())
                                                 ->GetAllSlotsInfo();
   std::unordered_map<std::string, int> slot_idxs;
-  for (AllSlotInfo slot_info : slots_info) {
+  for (AllSlotInfo& slot_info : slots_info) {
     if (slot_info.used_idx > 0) {
       slot_idxs[slot_info.slot] = slot_info.slot_value_idx;
     }
