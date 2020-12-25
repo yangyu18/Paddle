@@ -314,7 +314,12 @@ void BindDataset(py::module *m) {
       .def("set_pv_slots", &framework::Dataset::SetPvSlots,
            py::call_guard<py::gil_scoped_release>())
       .def("get_pv_slots", &framework::Dataset::GetPvSlots,
+           py::call_guard<py::gil_scoped_release>())
+      .def("set_pv_cmatchs", &framework::Dataset::SetPvCmatchs,
+           py::call_guard<py::gil_scoped_release>())
+      .def("get_pv_cmatchs", &framework::Dataset::GetPvCmatchs,
            py::call_guard<py::gil_scoped_release>());
+
 
   py::class_<IterableDatasetWrapper>(*m, "IterableDatasetWrapper")
       .def(py::init<framework::Dataset *, const std::vector<std::string> &,

@@ -1944,11 +1944,6 @@ void PadBoxSlotDataset::PreprocessInstance() {
   if (pv_slot_config_.size() > 0) {
     GenPvFeasigns();
   }
-
-  // test
-  //uint64_t cross_feasign = 0;
-  //generate_combine_fea_sign((uint32_t)16161, 11344125145877867431ull, 11762678867675955238ull, &cross_feasign);
-  // result is 271020980234854148. Right!
 }
 
 template <typename T>
@@ -1972,14 +1967,13 @@ void PadBoxSlotDataset::GenFeasignsOfOnePv(SlotPvInstance pv,
   if (ads.size() < 2) {
     return;
   }
-  if (ads[0]->cmatch != 222 && ads[0]->cmatch != 223) { // TODO: add cmatch configure.
-    return;
-  }
 
   const int MAX_RANK = 3;
   std::unordered_map<size_t, int> rank_idx;
   for (size_t i = 0; i < ads.size(); i++) {
-    rank_idx[ads[i]->rank] = i;
+    if (pv_cmatch_conf_.find(ads[i]->cmatch) != pv_cmatch_conf_.end()) {
+      rank_idx[ads[i]->rank] = i;
+    }
   }
   
   // key: slot_idx, val: pv feasigns.
@@ -2023,6 +2017,7 @@ void PadBoxSlotDataset::GenFeasignsOfOnePv(SlotPvInstance pv,
   }
   
   for (SlotRecord ad : ads) {
+    if (pv_cmatch_conf_.find(ad->cmatch) == pv_cmatch_conf_.end()) { continue; }
     for (auto& pv_slot_fea : pv_slot_feas) {
       ad->slot_uint64_feasigns_.insert_values(pv_slot_fea.second, pv_slot_fea.first);
     }

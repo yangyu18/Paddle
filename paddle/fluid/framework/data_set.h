@@ -153,6 +153,9 @@ class Dataset {
 
   virtual void SetPvSlots(const std::vector<std::vector<size_t>>& pv_slot_config) = 0;
   virtual const std::vector<PvSlotConfig>& GetPvSlots() = 0;
+  virtual void SetPvCmatchs(const std::vector<uint32_t>& pv_cmatch_conf) = 0;
+  virtual const std::vector<uint32_t>& GetPvCmatchs() = 0; 
+
 
  protected:
   virtual int ReceiveFromClient(int msg_type, int client_id,
@@ -257,6 +260,12 @@ class DatasetImpl : public Dataset {
   virtual const std::vector<PvSlotConfig>& GetPvSlots() {
     return pv_slot_config_;
   }
+  virtual void SetPvCmatchs(const std::vector<uint32_t>& pv_cmatch_conf) {
+    pv_cmatch_conf_.insert(pv_cmatch_conf.begin(), pv_cmatch_conf.end());
+  }
+  virtual const std::vector<uint32_t>& GetPvCmatchs() {
+    return pv_cmatch_conf_;
+  }
 
  protected:
   virtual int ReceiveFromClient(int msg_type, int client_id,
@@ -313,6 +322,7 @@ class DatasetImpl : public Dataset {
   std::vector<std::shared_ptr<ThreadPool>> consume_task_pool_;
   std::vector<T> input_records_;  // only for paddleboxdatafeed
   std::vector<PvSlotConfig> pv_slot_config_;
+  std::vector<uint32_t> pv_cmatch_conf_;
 };
 
 // use std::vector<MultiSlotType> or Record as data type
@@ -391,6 +401,12 @@ class PadBoxSlotDataset : public DatasetImpl<SlotRecord> {
   virtual const std::vector<PvSlotConfig>& GetPvSlots() {
     return pv_slot_config_;
   }
+  virtual void SetPvCmatchs(const std::vector<uint32_t>& pv_cmatch_conf) {
+    pv_cmatch_conf_.insert(pv_cmatch_conf.begin(), pv_cmatch_conf.end());
+  }
+  virtual const std::vector<uint32_t>& GetPvCmatchs() {
+    return pv_cmatch_conf_;
+  }
 
  protected:
   // shuffle data
@@ -418,6 +434,7 @@ class PadBoxSlotDataset : public DatasetImpl<SlotRecord> {
   void* data_consumer_ = nullptr;
   std::atomic<int> receiver_cnt_{0};
   std::vector<PvSlotConfig> pv_slot_config_;
+  std::vector<uint32_t> pv_cmatch_conf_;
 };
 #endif
 
