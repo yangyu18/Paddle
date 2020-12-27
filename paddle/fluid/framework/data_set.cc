@@ -1548,6 +1548,7 @@ void PadBoxSlotDataset::LoadIntoMemory() {
   //  shuffle_channel_->Clear();
   //  input_channel_->Clear();
 
+  // Merge PV and extract pv feas.
   PreprocessInstance();
 
   timeline.Pause();
@@ -2005,7 +2006,7 @@ void PadBoxSlotDataset::GenFeasignsOfOnePv(SlotPvInstance pv,
     for (int a_i = a_lo; a_i < a_hi; a_i++) {
       for (int b_i = b_lo; b_i < b_hi; b_i++) {
         uint64_t pv_fea = 0;
-        generate_combine_fea_sign((uint32_t)pv_slot_conf.pv_slot, 
+        generate_combine_fea_sign(static_cast<uint32_t>(std::stoul(pv_slot_conf.pv_slot)),
                                   ad_a->slot_uint64_feasigns_.slot_values[a_i],
                                   ad_b->slot_uint64_feasigns_.slot_values[b_i],
                                   &pv_fea);
@@ -2019,7 +2020,7 @@ void PadBoxSlotDataset::GenFeasignsOfOnePv(SlotPvInstance pv,
   for (SlotRecord ad : ads) {
     if (pv_cmatch_conf_.find(ad->cmatch) == pv_cmatch_conf_.end()) { continue; }
     for (auto& pv_slot_fea : pv_slot_feas) {
-      ad->slot_uint64_feasigns_.insert_values(pv_slot_fea.second, pv_slot_fea.first);
+      ad->slot_uint64_feasigns_.insert_values(pv_slot_fea.first, pv_slot_fea.second);
     }
   }
 }
@@ -2056,7 +2057,7 @@ void PadBoxSlotDataset::GenPvFeasigns() {
         pv_fea_set.clear();
         GenFeasignsOfOnePv(input_pv_ins_[i], slot_idxs, pv_fea_set);
         if (pv_fea_set.size() > 0) {
-          agent->AddKeys(&pv_feas[0], pv_fea_set.size(), tid);
+          agent->AddKeys(&pv_fea_set[0], pv_fea_set.size(), tid);
         }
       }
     }));

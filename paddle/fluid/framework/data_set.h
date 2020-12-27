@@ -154,8 +154,7 @@ class Dataset {
   virtual void SetPvSlots(const std::vector<std::vector<size_t>>& pv_slot_config) = 0;
   virtual const std::vector<PvSlotConfig>& GetPvSlots() = 0;
   virtual void SetPvCmatchs(const std::vector<uint32_t>& pv_cmatch_conf) = 0;
-  virtual const std::vector<uint32_t>& GetPvCmatchs() = 0; 
-
+  virtual const std::unordered_set<uint32_t>& GetPvCmatchs() = 0; 
 
  protected:
   virtual int ReceiveFromClient(int msg_type, int client_id,
@@ -251,8 +250,8 @@ class DatasetImpl : public Dataset {
         PvSlotConfig pv_slot_conf;
         pv_slot_conf.pv_slot = std::to_string(config[0]);
         pv_slot_conf.slot_a = std::to_string(config[1]);
-        pv_slot_conf.rank_a = std::to_string(config[2]);
-        pv_slot_conf.slot_b = config[3];
+        pv_slot_conf.rank_a = config[2];
+        pv_slot_conf.slot_b = std::to_string(config[3]);
         pv_slot_conf.rank_b = config[4];
         pv_slot_config_.emplace_back(pv_slot_conf);
     }
@@ -263,7 +262,7 @@ class DatasetImpl : public Dataset {
   virtual void SetPvCmatchs(const std::vector<uint32_t>& pv_cmatch_conf) {
     pv_cmatch_conf_.insert(pv_cmatch_conf.begin(), pv_cmatch_conf.end());
   }
-  virtual const std::vector<uint32_t>& GetPvCmatchs() {
+  virtual const std::unordered_set<uint32_t>& GetPvCmatchs() {
     return pv_cmatch_conf_;
   }
 
@@ -322,7 +321,7 @@ class DatasetImpl : public Dataset {
   std::vector<std::shared_ptr<ThreadPool>> consume_task_pool_;
   std::vector<T> input_records_;  // only for paddleboxdatafeed
   std::vector<PvSlotConfig> pv_slot_config_;
-  std::vector<uint32_t> pv_cmatch_conf_;
+  std::unordered_set<uint32_t> pv_cmatch_conf_;
 };
 
 // use std::vector<MultiSlotType> or Record as data type
@@ -392,8 +391,8 @@ class PadBoxSlotDataset : public DatasetImpl<SlotRecord> {
         PvSlotConfig pv_slot_conf;
         pv_slot_conf.pv_slot = std::to_string(config[0]);
         pv_slot_conf.slot_a = std::to_string(config[1]);
-        pv_slot_conf.rank_a = std::to_string(config[2]);
-        pv_slot_conf.slot_b = config[3];
+        pv_slot_conf.rank_a = config[2];
+        pv_slot_conf.slot_b = std::to_string(config[3]);
         pv_slot_conf.rank_b = config[4];
         pv_slot_config_.emplace_back(pv_slot_conf);
     }
@@ -404,7 +403,7 @@ class PadBoxSlotDataset : public DatasetImpl<SlotRecord> {
   virtual void SetPvCmatchs(const std::vector<uint32_t>& pv_cmatch_conf) {
     pv_cmatch_conf_.insert(pv_cmatch_conf.begin(), pv_cmatch_conf.end());
   }
-  virtual const std::vector<uint32_t>& GetPvCmatchs() {
+  virtual const std::unordered_set<uint32_t>& GetPvCmatchs() {
     return pv_cmatch_conf_;
   }
 
@@ -434,7 +433,7 @@ class PadBoxSlotDataset : public DatasetImpl<SlotRecord> {
   void* data_consumer_ = nullptr;
   std::atomic<int> receiver_cnt_{0};
   std::vector<PvSlotConfig> pv_slot_config_;
-  std::vector<uint32_t> pv_cmatch_conf_;
+  std::unordered_set<uint32_t> pv_cmatch_conf_;
 };
 #endif
 

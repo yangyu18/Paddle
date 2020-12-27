@@ -73,6 +73,8 @@ class DatasetBase(object):
         self.dataset = core.Dataset("MultiSlotDataset")
         self.thread_num = 1
         self.filelist = []
+        self.pv_slots = None
+        self.pv_cmatchs = None
 
     def set_pipe_command(self, pipe_command):
         """
@@ -367,12 +369,19 @@ class InMemoryDataset(DatasetBase):
         self.merge_by_lineid = False
         self.fleet_send_sleep_seconds = None
         self.pv_slots = None
+        self.pv_cmatchs = None
 
     def set_pv_slots(self, pv_slots):
         """
         set pv_slots
         """
         self.pv_slots = pv_slots
+
+    def set_pv_cmatchs(self, pv_cmatchs):
+        """
+        set pv_cmatchs
+        """
+        self.pv_cmatchs = pv_cmatchs
 
     def set_feed_type(self, data_feed_type):
         """
@@ -401,6 +410,9 @@ class InMemoryDataset(DatasetBase):
         if self.pv_slots is not None and len(self.pv_slots) > 0:
             assert len(self.pv_slots[0]) == 5
             self.dataset.set_pv_slots(self.pv_slots)
+        if self.pv_cmatchs is not None and len(self.pv_cmatchs) > 0:
+            self.dataset.set_pv_cmatchs(self.pv_cmatchs)
+
         self.dataset.create_channel()
         self.dataset.create_readers()
 
@@ -1036,6 +1048,7 @@ class BoxPSDataset(InMemoryDataset):
         self.boxps = core.BoxPS(self.dataset)
         self.proto_desc.name = "PaddleBoxDataFeed"
 
+
     def set_date(self, date):
         """
         Workaround for date
@@ -1184,6 +1197,8 @@ class PadBoxSlotDataset(BoxPSDataset):
         self.enable_pv_merge = False
         self.merge_by_lineid = False
         self.fleet_send_sleep_seconds = None
+        self.pv_slots = None
+        self.pv_cmatchs = None
 
     def load_into_memory(self):
         """
@@ -1199,3 +1214,17 @@ class PadBoxSlotDataset(BoxPSDataset):
         """
         self._prepare_to_run()
         self.boxps.read_ins_into_memory()
+
+    def set_pv_slots(self, pv_slots):
+        """
+        set pv_slots
+        """
+        self.pv_slots = pv_slots
+
+    def set_pv_cmatchs(self, pv_cmatchs):
+        """
+        set pv_cmatchs
+        """
+        self.pv_cmatchs = pv_cmatchs
+
+

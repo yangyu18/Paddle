@@ -811,7 +811,7 @@ struct SlotValues {
     slot_offsets.clear();
     slot_values.clear();
   }
-  void insert_values(const std::vector<T>& feasigns, const int slot_idx) {
+  void insert_values(const int slot_idx, const std::vector<T>& feasigns) {
     uint32_t offset = slot_offsets[slot_idx];
     slot_values.insert(slot_values.begin() + offset, feasigns.begin(), feasigns.end());
     for (size_t i = slot_idx + 1; i < slot_offsets.size(); i++) {
