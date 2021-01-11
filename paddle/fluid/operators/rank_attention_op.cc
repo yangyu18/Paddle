@@ -155,11 +155,14 @@ class RankAttentionGradOpMaker : public framework::SingleGradOpMaker<T> {
     op->SetInput("RankOffset", this->Input("RankOffset"));
     op->SetInput("RankParam", this->Input("RankParam"));
     op->SetInput("InputHelp", this->Output("InputHelp"));
+    op->SetInput("ParamHelp", this->Output("ParamHelp"));
     op->SetInput(framework::GradVarName("Out"), this->OutputGrad("Out"));
     op->SetInput("InsRank", this->Output("InsRank"));
 
     op->SetOutput(framework::GradVarName("RankParam"),
                   this->InputGrad("RankParam"));
+    op->SetOutput(framework::GradVarName("X"),
+                  this->InputGrad("X"));
     op->SetAttrMap(this->Attrs());
   }
 };

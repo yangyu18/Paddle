@@ -149,6 +149,35 @@ void merge_rank_attention_param_grad(cudaStream_t stream, T* expanded_grad,
                                 CUDA_NUM_THREADS, 0, stream>>>(
       expanded_grad, expanded_grad_row, expanded_grad_col, param_grad,
       param_grad_row, param_grad_col, ins_rank, ins_num, max_rank, input_col);
+
+template <typename T>
+__global__ void merge_input_gradient_kernel(
+    T* input_grad_help, int input_grad_help_row, int input_grad_help_col,
+    T* input_grad, int input_grad_row, int input_grad_col,
+    const T* ins_rank, int ins_num, int block_matrix_row) {
+  CUDA_KERNEL_LOOP(tid, input_grad_row * input_grad_col) {
+    int input_row_idx = tid % input_grad_row;
+    int input_col_idx = tid / input_grad_row;
+
+    int rank = ins_rank[input_row_idx];
+    int grad_row_idx = input_row_idx;
+    int grad_row_idx = input_row_idx;
+    int grad_idx = grad_row_idx + ins_num * grad_col_idx;
+
+    input_grad[tid] = input_grad_help[grad_idx];
+  }
+}
+template <typename T>
+void merge_rank_attention_input_grad(cudaStream_t stream, 
+    T* input_grad_help, int input_grad_help_row, int input_grad_help_col,
+    T* input_grad, int input_grad_row, int input_grad_col,
+    const T* ins_rank, int ins_num, int max_rank, int input_col) {
+  int block_matrix_row = max_rank * input_col;
+  merge_input_gradient_kernel<<<GET_BLOCKS(input_grad_row * input_grad_col),
+                                CUDA_NUM_THREADS, 0, stream>>>(
+      input_grad_help, input_grad_help_row, input_grad_help_col,
+      input_grad, input_grad_row, input_grad_col,
+      ins_rank, ins_num, block_matrix_row);
 }
 
 }  // namespace operators

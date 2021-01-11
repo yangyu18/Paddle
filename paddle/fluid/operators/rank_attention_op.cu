@@ -131,6 +131,7 @@ class RankAttentionGradOpCUDAKernel : public framework::OpKernel<T> {
     auto *rank_offset = ctx.Input<Tensor>("RankOffset");  // not use data
     auto *param = ctx.Input<Tensor>("RankParam");         // not use data
     auto *input_help = ctx.Input<Tensor>("InputHelp");
+    auto *param_help = ctx.Input<Tensor>("ParamHelp");
     auto *ins_rank = ctx.Input<Tensor>("InsRank");
     auto *dout = ctx.Input<Tensor>(framework::GradVarName("Out"));
     int64_t max_size = ctx.Attr<int>("MaxSize");
@@ -167,6 +168,7 @@ class RankAttentionGradOpCUDAKernel : public framework::OpKernel<T> {
     auto param_grad_eigen = framework::EigenVector<T>::Flatten(param_grad);
     param_grad_eigen.device(place) =
         param_grad_eigen.constant(static_cast<T>(0));
+
     // get data ptr
     const T *input_help_data = input_help->data<T>();
     const T *ins_rank_data = ins_rank->data<T>();
@@ -189,6 +191,32 @@ class RankAttentionGradOpCUDAKernel : public framework::OpKernel<T> {
         ctx.cuda_device_context().stream(), param_grad_data,
         ins_num * block_matrix_row, para_col, drank_para->data<T>(), para_row,
         para_col, ins_rank_data, ins_num, max_rank, x_fea_dim);
+
+    // bp input
+    auto *dx = ctx.Output<Tensor>(framework::GradVarName("X"));
+    dx->mutable_data<T>(ctx.GetPlace());
+    auto dx_eigen = framework::EigenVector<T>::Flatten(*dx);
+    dx_eigen.device(place) = dx_eigen.constant(static_cast<T>(0));
+
+    Tensor in_grad;
+    in_grad = ctx.AllocateTmpTensor<T, DeviceContext>({ins_num, x_fea_dim}, dev_ctx);
+    in_grad.mutable_data<T>(ctx.GetPlace());
+    auto in_grad_eigen = framework::EigenVector<T>::Flatten(in_grad);
+    in_grad_eigen.device(place) = in_grad_eigen.constant(static_cast<T>(0));
+    
+    T *param_help_data = param_help->data<T>();
+
+    CBLAS_TRANSPOSE transA = CblasNoTrans;
+    CBLAS_TRANSPOSE transB = CblasTrans;
+    int64_t strideA = 1;
+    int64_t strideB = block_matrix_row;
+    blas.BatchedGEMM(transA, transB, 1, block_matrix_row, para_col, alpha,
+                     dout->data<T>(), param_help_data, beta, in_grad_data,
+                     ins_num, strideA, strideB);
+    merge_rank_attention_param_grad(ctx.cuda_device_context().stream(),
+        input_help_data, ins_num, x_fea_dim * max_rank,
+        in_grad_data, ins_num, x_fea_dim,
+        ins_rank_data, ins_num, max_rank, x_fea_dim);
   }
 };
 
